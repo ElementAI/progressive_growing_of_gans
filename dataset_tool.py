@@ -43,7 +43,7 @@ class TFRecordExporter:
         if not os.path.isdir(self.tfrecord_dir):
             os.makedirs(self.tfrecord_dir)
         assert(os.path.isdir(self.tfrecord_dir))
-        
+
     def close(self):
         if self.print_progress:
             print('%-40s\r' % 'Flushing data...', end='', flush=True)
@@ -451,6 +451,24 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
 
 #----------------------------------------------------------------------------
 
+def create_ssense(tfrecord_dir, ssense_dir):
+    print('Loading CelebA from "%s"' % ssense_dir)
+    glob_pattern = os.path.join(ssense_dir, '*.png')
+    image_filenames = sorted(glob.glob(glob_pattern))
+    # expected_images = 202599
+    # if len(image_filenames) != expected_images:
+    #     error('Expected to find %d images' % expected_images)
+
+    with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        order = tfr.choose_shuffled_order()
+        for idx in range(order.size):
+            img = np.asarray(PIL.Image.open(image_filenames[order[idx]]))
+            img = img.transpose(2, 0, 1) # HWC => CHW
+            img = img.resize((1024, 1024))
+            tfr.add_image(img)
+
+#----------------------------------------------------------------------------
+
 def create_celebahq(tfrecord_dir, celeba_dir, delta_dir, num_threads=4, num_tasks=100):
     print('Loading CelebA from "%s"' % celeba_dir)
     expected_images = 202599
@@ -600,7 +618,6 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
     image_filenames = sorted(glob.glob(os.path.join(image_dir, '*')))
     if len(image_filenames) == 0:
         error('No input images found')
-        
     img = np.asarray(PIL.Image.open(image_filenames[0]))
     resolution = img.shape[0]
     channels = img.shape[2] if img.ndim == 3 else 1
