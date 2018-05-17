@@ -462,9 +462,10 @@ def create_ssense(tfrecord_dir, ssense_dir):
     with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
         order = tfr.choose_shuffled_order()
         for idx in range(order.size):
-            img = np.asarray(PIL.Image.open(image_filenames[order[idx]]))
-            img = img.transpose(2, 0, 1) # HWC => CHW
+            img = PIL.Image.open(image_filenames[order[idx]])
             img = img.resize((1024, 1024))
+            img = np.asarray(img)
+            img = img.transpose(2, 0, 1) # HWC => CHW
             tfr.add_image(img)
 
 #----------------------------------------------------------------------------
