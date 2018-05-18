@@ -53,7 +53,7 @@ grid        = EasyDict(size='1080p', layout='random')       # Options for train.
 # desc += '-celebahq';            dataset = EasyDict(tfrecord_dir='celebahq'); train.mirror_augment = True
 #desc += '-celeba';              dataset = EasyDict(tfrecord_dir='celeba'); train.mirror_augment = True
 #desc += '-cifar10';             dataset = EasyDict(tfrecord_dir='cifar10')
-desc += '-ssense';             dataset = EasyDict(tfrecord_dir='ssense')
+desc += '-ssense';             dataset = EasyDict(tfrecord_dir='/mnt_host/scratch/ssense/tf_record_ssense')
 #desc += '-cifar100';            dataset = EasyDict(tfrecord_dir='cifar100')
 #desc += '-svhn';                dataset = EasyDict(tfrecord_dir='svhn')
 #desc += '-mnist';               dataset = EasyDict(tfrecord_dir='mnist')
