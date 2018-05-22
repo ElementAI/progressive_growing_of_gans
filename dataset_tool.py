@@ -702,7 +702,7 @@ def execute_cmdline(argv):
     p.add_argument(     'cifar10_dir',      help='Directory containing CIFAR-10')
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
-                                            'create_cifar10 datasets/SSENSE/downloads/SSENSE')
+                                            'create_cifar10 datasets/SSENSE ~/downloads/SSENSE')
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'ssense_dir',      help='Directory containing SSENSE')
 
