@@ -704,8 +704,8 @@ def execute_cmdline(argv):
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
                                             'create_ssense datasets/SSENSE ~/downloads/SSENSE')
-    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_tf')
-    p.add_argument(     'ssense_dir',       help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_png_dump')
+    p.add_argument(     '--tfrecord_dir',     help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_tf')
+    p.add_argument(     '--ssense_dir',       help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_png_dump')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=1024)
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
