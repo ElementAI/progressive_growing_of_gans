@@ -451,7 +451,7 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
 
 #----------------------------------------------------------------------------
 
-def create_ssense(tfrecord_dir, ssense_dir):
+def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
     print('Loading CelebA from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
     image_filenames = sorted(glob.glob(glob_pattern))
@@ -463,7 +463,8 @@ def create_ssense(tfrecord_dir, ssense_dir):
         order = tfr.choose_shuffled_order()
         for idx in range(order.size):
             img = PIL.Image.open(image_filenames[order[idx]])
-            # img = img.resize((1024, 1024))
+            if resolution != 1024:
+                img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
             img = np.asarray(img)
             img = img.transpose(2, 0, 1) # HWC => CHW
             tfr.add_image(img)
@@ -702,9 +703,10 @@ def execute_cmdline(argv):
     p.add_argument(     'cifar10_dir',      help='Directory containing CIFAR-10')
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
-                                            'create_cifar10 datasets/SSENSE ~/downloads/SSENSE')
+                                            'create_ssense datasets/SSENSE ~/downloads/SSENSE')
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
-    p.add_argument(     'ssense_dir',      help='Directory containing SSENSE')
+    p.add_argument(     'ssense_dir',       help='Directory containing SSENSE')
+    p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=1024)
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
                                             'create_cifar100 datasets/cifar100 ~/downloads/cifar100')
