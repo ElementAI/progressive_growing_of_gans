@@ -452,7 +452,7 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
 #----------------------------------------------------------------------------
 
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
-    print('Loading CelebA from "%s"' % ssense_dir)
+    print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
     image_filenames = sorted(glob.glob(glob_pattern))
     # expected_images = 202599
