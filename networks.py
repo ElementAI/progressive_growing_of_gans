@@ -58,8 +58,8 @@ def get_film_postmultiplier(weight_decay_film):
     gamma_postmultiplier = tf.get_variable(name='gamma_postmultiplier', dtype=tf.float32, initializer=0.0,
                                    regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
                                                                                 scope='penalize_gamma'))
-    tf.summary.scalar('beta_postmultiplier', beta_postmultiplier)
-    tf.summary.scalar('gamma_postmultiplier', gamma_postmultiplier)
+#     tf.summary.scalar('beta_postmultiplier_track', beta_postmultiplier)
+#     tf.summary.scalar('gamma_postmultiplier_track', gamma_postmultiplier)
     return beta_postmultiplier, gamma_postmultiplier
 
 
@@ -199,7 +199,7 @@ def G_film(
         use_leakyrelu=True,  # True = leaky ReLU, False = ReLU.
         dtype='float32',  # Data type to use for activations and outputs.
         fused_scale=True,  # True = use fused upscale2d + conv2d, False = separate upscale2d layers.
-        structure=None,  # 'linear' = human-readable, 'recursive' = efficient, None = select automatically.
+        structure='linear',  # 'linear' = human-readable, 'recursive' = efficient, None = select automatically.
         is_template_graph=False,  # True = template graph constructed by the Network class, False = actual evaluation.
         **kwargs):  # Ignore unrecognized keyword args.
 
@@ -222,7 +222,7 @@ def G_film(
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
 
     # Building blocks.
-    def block(x, res, text_embed, weight_decay_film):  # res = 2..resolution_log2
+    def block(x, res, text_embed, weight_decay_film, **kwargs):  # res = 2..resolution_log2
         with tf.variable_scope('%dx%d' % (2 ** res, 2 ** res)):
             if res == 2:  # 4x4
                 if normalize_latents: x = pixel_norm(x, epsilon=pixelnorm_epsilon)
