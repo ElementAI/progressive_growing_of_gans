@@ -68,7 +68,7 @@ def get_film_postmultiplier(weight_decay_film):
 def apply_film(x, text_embed, weight_decay_film, **kwargs):
     embed_size = text_embed.shape.as_list()[1]
     fmaps = x.shape.as_list()[1]
-    scope = tf.get_variable_scope().name.replace('/', '')
+    scope = "".join(tf.get_variable_scope().name.split('/')[1:])
     with tf.variable_scope('FILM'):
         gamma_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='gamma_weight')
         beta_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='beta_weight')
