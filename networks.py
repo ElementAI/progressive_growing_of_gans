@@ -59,8 +59,6 @@ def get_film_postmultiplier(weight_decay_film):
     gamma_postmultiplier = tf.get_variable(name='gamma_postmultiplier', dtype=tf.float32, initializer=0.0,
                                    regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
                                                                                 scope='penalize_gamma'))
-#     tf.summary.scalar('beta_postmultiplier_track', beta_postmultiplier)
-#     tf.summary.scalar('gamma_postmultiplier_track', gamma_postmultiplier)
     return beta_postmultiplier, gamma_postmultiplier
 
 
@@ -70,13 +68,14 @@ def get_film_postmultiplier(weight_decay_film):
 def apply_film(x, text_embed, weight_decay_film, **kwargs):
     embed_size = text_embed.shape.as_list()[1]
     fmaps = x.shape.as_list()[1]
+    scope = tf.get_variable_scope().name.replace('/', '')
     with tf.variable_scope('FILM'):
         gamma_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='gamma_weight')
-        beta_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='gamma_weight')
+        beta_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='beta_weight')
 
         beta_postmultiplier, gamma_postmultiplier = get_film_postmultiplier(weight_decay_film)
-        beta_postmultiplier = tfutil.autosummary('Film/beta_0', beta_postmultiplier)
-        gamma_postmultiplier = tfutil.autosummary('Film/gamma_0', gamma_postmultiplier)
+        beta_postmultiplier = tfutil.autosummary('Film/beta_0/'+scope, beta_postmultiplier)
+        gamma_postmultiplier = tfutil.autosummary('Film/gamma_0/'+scope, gamma_postmultiplier)
 
         gamma = tf.matmul(text_embed, gamma_weight)
         beta = tf.matmul(text_embed, beta_weight)
