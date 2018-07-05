@@ -7,6 +7,7 @@
 
 import numpy as np
 import tensorflow as tf
+import tfutil
 
 # NOTE: Do not import any application-specific modules here!
 
@@ -74,6 +75,8 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
         beta_weight = get_weight(shape=[embed_size, fmaps], use_wscale=False, name='gamma_weight')
 
         beta_postmultiplier, gamma_postmultiplier = get_film_postmultiplier(weight_decay_film)
+        beta_postmultiplier = tfutil.autosummary('Film/beta_0', beta_postmultiplier)
+        gamma_postmultiplier = tfutil.autosummary('Film/gamma_0', gamma_postmultiplier)
 
         gamma = tf.matmul(text_embed, gamma_weight)
         beta = tf.matmul(text_embed, beta_weight)
