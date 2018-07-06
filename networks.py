@@ -63,6 +63,16 @@ def get_film_postmultiplier(weight_decay_film):
 
 
 #----------------------------------------------------------------------------
+# Batch Instance-wise feature vector normalization.
+
+def instance_norm(x, epsilon=1e-8):
+    with tf.variable_scope('InstanceNorm'):
+        mu = tf.reduce_mean(x, axis=[2, 3], keepdims=True)
+        rsigma = tf.rsqrt(tf.reduce_mean(tf.square(x), axis=[2, 3], keepdims=True) + epsilon)
+        return (x - mu) * rsigma
+
+
+#----------------------------------------------------------------------------
 # FILM Layer
 
 def apply_film(x, text_embed, weight_decay_film, **kwargs):
@@ -82,6 +92,8 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
 
         beta = tf.multiply(beta_postmultiplier, beta, name='postmultiply_beta')
         gamma = 1.0 + tf.multiply(gamma_postmultiplier, gamma, name='postmultiply_gamma')
+
+        x = instance_norm(x)
 
         if len(x.shape) == 2:
             return x*gamma + beta
