@@ -15,6 +15,8 @@ import traceback
 import numpy as np
 import tensorflow as tf
 import PIL.Image
+import json
+import re
 
 import tfutil
 import dataset
@@ -59,7 +61,9 @@ class TFRecordExporter:
         np.random.RandomState(123).shuffle(order)
         return order
 
-    def add_image(self, img):
+    def add_image(self, img, meta_data=None):
+        # meta_data is a dictionary of the list of integers
+
         if self.print_progress and self.cur_images % self.progress_interval == 0:
             print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
         if self.shape is None:
@@ -78,9 +82,13 @@ class TFRecordExporter:
                 img = img.astype(np.float32)
                 img = (img[:, 0::2, 0::2] + img[:, 0::2, 1::2] + img[:, 1::2, 0::2] + img[:, 1::2, 1::2]) * 0.25
             quant = np.rint(img).clip(0, 255).astype(np.uint8)
-            ex = tf.train.Example(features=tf.train.Features(feature={
-                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
-                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}))
+            feature = {'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
+                       'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}
+            if meta_data is not None:
+                for key, val in meta_data.items():
+                    feature[key] = tf.train.Feature(bytes_list=tf.train.Int64List(value=val))
+
+            ex = tf.train.Example(features=tf.train.Features(feature=feature))
             tfr_writer.write(ex.SerializeToString())
         self.cur_images += 1
 
@@ -451,6 +459,19 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
 
 #----------------------------------------------------------------------------
 
+
+def str_to_int(str_set, str_labels):
+    num_labels = np.zeros(len(str_labels), dtype=np.int64)
+    str_dict = {}
+    for idx, token in enumerate(str_set):
+        str_dict[token] = idx
+
+    for idx, token in enumerate(str_labels):
+        num_labels[idx] = str_dict[token]
+
+    return num_labels, str_dict
+
+
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
     print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
@@ -461,13 +482,39 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
 
     with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
         order = tfr.choose_shuffled_order()
+        labels = []
+        category = set()
         for idx in range(order.size):
-            img = PIL.Image.open(image_filenames[order[idx]])
+            # Handle image data
+            img_name = image_filenames[order[idx]]
+            img = PIL.Image.open(img_name)
             if resolution != 1024:
                 img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
             img = np.asarray(img)
             img = img.transpose(2, 0, 1) # HWC => CHW
-            tfr.add_image(img)
+
+            # Handle meta data
+            json_name = img_name.split('/')[-1].split('_')[0] + '.json'
+            meta_data = {}
+            with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
+                json_content = json.load(f)
+                meta_data['pose'] = int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
+                meta_data['description'] = json_content['description'].encode()
+
+                labels.append(json_content['category'])
+                category.add(json_content['category'])
+            # add image to tfrecord
+            tfr.add_image(img, meta_data=None)
+
+        # add labels
+        labels, str_dict = str_to_int(category, labels)
+        onehot = np.zeros((labels.size, np.max(labels) + 1), dtype=np.float32)
+        onehot[np.arange(labels.size), labels] = 1.0
+        print('Category dictionary: ', str_dict)
+        print('Number of categories: ', len(set(labels)))
+        tfr.add_labels(onehot[order])
+        with open(tfr.tfr_prefix+'-category_dictionary.json', 'w') as fp:
+            json.dump(str_dict, fp)
 
 #----------------------------------------------------------------------------
 
