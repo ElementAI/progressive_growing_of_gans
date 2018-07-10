@@ -473,6 +473,8 @@ def str_to_int(str_set, str_labels):
 
 
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
+    # import matplotlib.pyplot as plt
+
     print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
     image_filenames = sorted(glob.glob(glob_pattern))
@@ -506,13 +508,16 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
             # add image to tfrecord
             tfr.add_image(img, meta_data=None)
 
+            # plt.imshow(np.transpose(img, [1, 2, 0]))
+            # print(json_content['category'])
+
         # add labels
         labels, str_dict = str_to_int(category, labels)
         onehot = np.zeros((labels.size, np.max(labels) + 1), dtype=np.float32)
         onehot[np.arange(labels.size), labels] = 1.0
         print('Category dictionary: ', str_dict)
         print('Number of categories: ', len(set(labels)))
-        tfr.add_labels(onehot[order])
+        tfr.add_labels(onehot)
         with open(tfr.tfr_prefix+'-category_dictionary.json', 'w') as fp:
             json.dump(str_dict, fp)
 
