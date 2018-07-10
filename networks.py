@@ -102,6 +102,16 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
 
 
 #----------------------------------------------------------------------------
+# Function to transform condition, e.g. labels or text embedding before feeding into film layers
+
+def embed_condition(x, fmaps):
+    x = dense(x, fmaps)
+    x = apply_bias(x)
+    x = leaky_relu(x)
+    return x
+
+
+#----------------------------------------------------------------------------
 # Apply bias to the given activation tensor.
 
 def apply_bias(x):
@@ -232,7 +242,8 @@ def G_film(
 
     latents_in.set_shape([None, latent_size])
     labels_in.set_shape([None, label_size])
-    combo_in = tf.cast(tf.concat([latents_in, labels_in], axis=1), dtype)
+    combo_in = tf.cast(latents_in, dtype)
+    text_embed = tf.cast(labels_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
 
     # Building blocks.
@@ -275,11 +286,14 @@ def G_film(
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
-        x = block(combo_in, 2, text_embed=combo_in, **kwargs)
+        with tf.variable_scope('TextEmbedding'):
+            text_embed = embed_condition(text_embed, fmaps=latent_size)
+
+        x = block(combo_in, 2, text_embed=text_embed, **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
             lod = resolution_log2 - res
-            x = block(x, res, text_embed=combo_in, **kwargs)
+            x = block(x, res, text_embed=text_embed, **kwargs)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
             with tf.variable_scope('Grow_lod%d' % lod):
