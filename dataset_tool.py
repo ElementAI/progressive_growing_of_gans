@@ -488,28 +488,35 @@ def get_pose_from_ssense_img_name(img_name):
 def ssense_clean(ssense_dir, image_filenames):
     category_set = set()
     category_max_pose = {}
-
+    pose = []
+    category = []
     for idx, img_name in enumerate(tqdm(image_filenames)):
         json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
-        pose = get_pose_from_ssense_img_name(img_name)
-        category = json_content['category']
-        category_set.add(category)
-        category_max_pose[category] = max(category_max_pose.get(category, 0), pose)
+        pose_current = get_pose_from_ssense_img_name(img_name)
+        pose.append(pose_current)
+        category_current = json_content['subcategory']
+        category.append(category_current)
+        category_set.add(category_current)
+        category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
     # This is to exclude the category with no name
-    category_max_pose["b''"] = 0
+    category_max_pose["b''"] = -1
     print("Number of categories: ", len(category_max_pose))
     print("Number of poses in category: ")
     print(category_max_pose)
+    print("Availalbe poses: ", list(set(pose)))
+
+    pose_distribution = np.bincount(pose)
+    print("Pose frequencies: ")
+    print(list(zip(np.arange(len(pose_distribution)), pose_distribution)))
 
     image_filenames_clean = []
     for idx, img_name in enumerate(tqdm(image_filenames)):
-        json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
-        category = json_content['category']
-        pose = get_pose_from_ssense_img_name(img_name)
-        if pose < category_max_pose.get(category, 1e8):
+        category_current = category[idx]
+        if pose[idx] < min(5, category_max_pose.get(category_current, 6)):
             image_filenames_clean.append(img_name)
 
     return image_filenames_clean
+
 
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # mode: None usual dataset creation mode
