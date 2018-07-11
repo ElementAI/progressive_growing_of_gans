@@ -16,7 +16,7 @@ import numpy as np
 import tensorflow as tf
 import PIL.Image
 import json
-import re
+import pathlib
 
 import tfutil
 import dataset
@@ -472,7 +472,10 @@ def str_to_int(str_set, str_labels):
     return num_labels, str_dict
 
 
-def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
+def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
+    # mode: None usual dataset creation mode
+    # mode: 'examples' save subset of image examples categorized in folders by category
+
     # import matplotlib.pyplot as plt
 
     print('Loading SSENSE from "%s"' % ssense_dir)
@@ -506,7 +509,14 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
                 labels.append(json_content['category'])
                 category.add(json_content['category'])
             # add image to tfrecord
-            tfr.add_image(img, meta_data=None)
+            if mode is None:
+                tfr.add_image(img, meta_data=None)
+            elif mode == 'examples':
+                if np.random.uniform() < 0.01:
+                    folder_name = os.path.join(tfr.tfr_prefix, json_content['category'])
+                    pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
+                    img_example = PIL.Image.fromarray(img.transpose(1,2,0)).resize((128, 128), PIL.Image.ANTIALIAS)
+                    img_example.save(os.path.join(folder_name, img_name.split('/')[-1]))
 
             # plt.imshow(np.transpose(img, [1, 2, 0]))
             # print(json_content['category'])
@@ -517,7 +527,8 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024):
         onehot[np.arange(labels.size), labels] = 1.0
         print('Category dictionary: ', str_dict)
         print('Number of categories: ', len(set(labels)))
-        tfr.add_labels(onehot)
+        if mode is None:
+            tfr.add_labels(onehot)
         with open(tfr.tfr_prefix+'-category_dictionary.json', 'w') as fp:
             json.dump(str_dict, fp)
 
@@ -756,9 +767,10 @@ def execute_cmdline(argv):
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
                                             'create_ssense datasets/SSENSE ~/downloads/SSENSE')
-    p.add_argument(     '--tfrecord_dir',     help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_tf')
-    p.add_argument(     '--ssense_dir',       help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_png_dump')
+    p.add_argument(     '--tfrecord_dir',   help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_tf')
+    p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/subset_images_png_dump')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=1024)
+    p.add_argument(     '--mode',           help='script modes', type=str,  default=None, choices=[None, 'examples'])
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
                                             'create_cifar100 datasets/cifar100 ~/downloads/cifar100')
