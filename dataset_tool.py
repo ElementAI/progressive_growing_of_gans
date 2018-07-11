@@ -20,6 +20,7 @@ import pathlib
 
 import tfutil
 import dataset
+from tqdm import trange, tqdm
 
 #----------------------------------------------------------------------------
 
@@ -487,7 +488,8 @@ def get_pose_from_ssense_img_name(img_name):
 def ssense_clean(ssense_dir, image_filenames):
     category_set = set()
     category_max_pose = {}
-    for idx, img_name in enumerate(image_filenames):
+
+    for idx, img_name in enumerate(tqdm(image_filenames)):
         json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
         pose = get_pose_from_ssense_img_name(img_name)
         category = json_content['category']
@@ -495,9 +497,12 @@ def ssense_clean(ssense_dir, image_filenames):
         category_max_pose[category] = max(category_max_pose.get(category, 0), pose)
     # This is to exclude the category with no name
     category_max_pose["b''"] = 0
+    print("Number of categories: ", len(category_max_pose))
+    print("Number of poses in category: ")
+    print(category_max_pose)
 
     image_filenames_clean = []
-    for idx, img_name in enumerate(image_filenames):
+    for idx, img_name in enumerate(tqdm(image_filenames)):
         json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
         category = json_content['category']
         pose = get_pose_from_ssense_img_name(img_name)
@@ -527,7 +532,7 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
         order = tfr.choose_shuffled_order()
         labels = []
         category = set()
-        for idx in range(order.size):
+        for idx in trange(order.size):
             # Handle image data
             img_name = image_filenames[order[idx]]
             img = PIL.Image.open(img_name)
