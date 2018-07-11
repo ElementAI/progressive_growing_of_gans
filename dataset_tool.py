@@ -472,6 +472,40 @@ def str_to_int(str_set, str_labels):
     return num_labels, str_dict
 
 
+
+def get_json_from_ssense_img_name(ssense_dir, img_name):
+    json_name = img_name.split('/')[-1].split('_')[0] + '.json'
+    with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
+        json_content = json.load(f)
+    return json_content
+
+
+def get_pose_from_ssense_img_name(img_name):
+    return int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
+
+
+def ssense_clean(ssense_dir, image_filenames):
+    category_set = set()
+    category_max_pose = {}
+    for idx, img_name in enumerate(image_filenames):
+        json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
+        pose = get_pose_from_ssense_img_name(img_name)
+        category = json_content['category']
+        category_set.add(category)
+        category_max_pose[category] = max(category_max_pose.get(category, 0), pose)
+    # This is to exclude the category with no name
+    category_max_pose["b''"] = 0
+
+    image_filenames_clean = []
+    for idx, img_name in enumerate(image_filenames):
+        json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
+        category = json_content['category']
+        pose = get_pose_from_ssense_img_name(img_name)
+        if pose < category_max_pose.get(category, 1e8):
+            image_filenames_clean.append(img_name)
+
+    return image_filenames_clean
+
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # mode: None usual dataset creation mode
     # mode: 'examples' save subset of image examples categorized in folders by category
@@ -481,6 +515,10 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
     image_filenames = sorted(glob.glob(glob_pattern))
+    print('Cleaning the items where item is mixed with other items')
+    print('Initial number of images: ', len(image_filenames))
+    image_filenames = ssense_clean(ssense_dir, image_filenames)
+    print('Cleaned number of images: ', len(image_filenames))
     # expected_images = 202599
     # if len(image_filenames) != expected_images:
     #     error('Expected to find %d images' % expected_images)
