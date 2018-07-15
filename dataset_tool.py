@@ -20,6 +20,7 @@ import pathlib
 
 import tfutil
 import dataset
+import misc
 from tqdm import trange, tqdm
 
 #----------------------------------------------------------------------------
@@ -518,6 +519,61 @@ def ssense_clean(ssense_dir, image_filenames):
     return image_filenames_clean
 
 
+def create_ssense_class_grids(tfrecord_dir, ssense_dir, resolution=128, mode=None):
+    print('Loading SSENSE from "%s"' % ssense_dir)
+    glob_pattern = os.path.join(ssense_dir, '*.png')
+    image_filenames = sorted(glob.glob(glob_pattern))
+    # print('Cleaning the items where item is mixed with other items')
+    # print('Initial number of images: ', len(image_filenames))
+    # image_filenames = ssense_clean(ssense_dir, image_filenames)
+    # print('Cleaned number of images: ', len(image_filenames))
+
+    category_set = set()
+    category_max_pose = {}
+    category_images = {}
+    pose = []
+    category = []
+    for idx, img_name in enumerate(tqdm(image_filenames)):
+        json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
+        pose_current = get_pose_from_ssense_img_name(img_name)
+        pose.append(pose_current)
+        category_current = json_content['subcategory']
+        category.append(category_current)
+        category_set.add(category_current)
+        category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
+
+        img_name_no_pose = img_name.split('/')[-1].split('_')[0]
+        category_images[category_current] = category_images.get(category_current, []) + [img_name_no_pose]
+
+    gh = 6
+    tfr = TFRecordExporter(tfrecord_dir, len(image_filenames))
+    for category_current in category:
+        category_images[category_current] = list(set(category_images[category_current]))
+        gw = min(20, len(category_images[category_current]))
+        items_select = np.array(category_images[category_current], dtype=np.int64)
+        items_select = np.random.choice(np.arange(len(items_select)), size=gw, replace=False)
+        items_select = [category_images[category_current][i] for i in items_select]
+        images = np.zeros([gw * gh] + [3, resolution, resolution], dtype=np.uint8)
+        for idx in range(gw * gh):
+            item = idx % gw
+            pose = idx // gw + 1
+            img_name = items_select[item] + '_bid_gridfs_' + str(pose) + '.png'
+            try:
+                img = PIL.Image.open(os.path.join(ssense_dir, img_name))
+                if resolution != 1024:
+                    img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
+                img = np.asarray(img)
+                img = img.transpose(2, 0, 1)  # HWC => CHW
+            except:
+                img = 255*np.ones(shape=(3, resolution, resolution), dtype=np.uint8)
+
+            images[idx] = img
+
+        filename = os.path.join(tfr.tfr_prefix, category_current + '-examples.png')
+        pathlib.Path(tfr.tfr_prefix).mkdir(parents=True, exist_ok=True)
+        misc.save_image_grid(images, filename, drange=[0, 255], grid_size=(gw, gh))
+
+
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # mode: None usual dataset creation mode
     # mode: 'examples' save subset of image examples categorized in folders by category
@@ -821,6 +877,16 @@ def execute_cmdline(argv):
     p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/images_png_dump')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=128)
     p.add_argument(     '--mode',           help='script modes', type=str,  default=None, choices=[None, 'examples'])
+
+    p = add_command('create_ssense_class_grids', 'Create grid images with examples of class images',
+                    'create_ssense datasets/SSENSE ~/downloads/SSENSE')
+    p.add_argument('--tfrecord_dir', help='New dataset directory to be created', type=str,
+                   default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
+    p.add_argument('--ssense_dir', help='Directory containing SSENSE', type=str,
+                   default='/mnt/scratch/ssense/data_dumps/images_png_dump')
+    p.add_argument('--resolution', help='Output resolution (default: 1024)', type=int, default=128)
+    p.add_argument('--mode', help='script modes', type=str, default=None, choices=[None, 'examples'])
+
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
                                             'create_cifar100 datasets/cifar100 ~/downloads/cifar100')
