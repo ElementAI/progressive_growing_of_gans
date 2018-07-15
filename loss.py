@@ -43,6 +43,12 @@ def G_wgan_acgan(G, D, opt, training_set, minibatch_size,
         text_embedding_kl_loss = tfutil.autosummary('Loss/text_embedding_kl', text_embedding_kl_loss[0])
         loss += text_embedding_kl_loss
 
+    # Penalizing the gamma and beta postmultipliers in the film layer
+    postmultiplier_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES, scope='G/.*postmultiplier.*')
+    if len(postmultiplier_loss) > 0:
+        postmultiplier_loss = tf.add_n(postmultiplier_loss)
+        loss += postmultiplier_loss
+
     return loss
 
 #----------------------------------------------------------------------------

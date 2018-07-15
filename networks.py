@@ -54,11 +54,11 @@ def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
 
 def get_film_postmultiplier(weight_decay_film):
     beta_postmultiplier = tf.get_variable(name='beta_postmultiplier', dtype=tf.float32, initializer=0.0,
-                                  regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
-                                                                               scope='penalize_beta'))
+                                          regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
+                                          scope='penalize_beta'))
     gamma_postmultiplier = tf.get_variable(name='gamma_postmultiplier', dtype=tf.float32, initializer=0.0,
-                                   regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
-                                                                                scope='penalize_gamma'))
+                                           regularizer=tf.contrib.layers.l2_regularizer(scale=weight_decay_film,
+                                           scope='penalize_gamma'))
     return beta_postmultiplier, gamma_postmultiplier
 
 
