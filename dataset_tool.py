@@ -513,7 +513,7 @@ def ssense_clean(ssense_dir, image_filenames):
     image_filenames_clean = []
     for idx, img_name in enumerate(tqdm(image_filenames)):
         category_current = category[idx]
-        if pose[idx] < min(5, category_max_pose.get(category_current, 6)):
+        if pose[idx] < min(4, category_max_pose.get(category_current, 6)):
             image_filenames_clean.append(img_name)
 
     return image_filenames_clean
@@ -612,14 +612,14 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
                 meta_data['pose'] = int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
                 meta_data['description'] = json_content['description'].encode()
 
-                labels.append(json_content['category'])
-                category.add(json_content['category'])
+                labels.append(json_content['subcategory'])
+                category.add(json_content['subcategory'])
             # add image to tfrecord
             if mode is None:
                 tfr.add_image(img, meta_data=None)
             elif mode == 'examples':
                 if np.random.uniform() < 0.01:
-                    folder_name = os.path.join(tfr.tfr_prefix, json_content['category'])
+                    folder_name = os.path.join(tfr.tfr_prefix, json_content['subcategory'])
                     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
                     img_example = PIL.Image.fromarray(img.transpose(1,2,0)).resize((128, 128), PIL.Image.ANTIALIAS)
                     img_example.save(os.path.join(folder_name, img_name.split('/')[-1]))
