@@ -35,6 +35,14 @@ def G_wgan_acgan(G, D, opt, training_set, minibatch_size,
         with tf.name_scope('LabelPenalty'):
             label_penalty_fakes = tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=fake_labels_out)
         loss += label_penalty_fakes * cond_weight
+
+    # randomized text embedding KL loss, stack GAN style
+    gpu_scope = "/".join(loss.name.split('/')[0:2])
+    text_embedding_kl_loss = tf.losses.get_regularization_losses(scope=gpu_scope+'.*TextEmbedding/KL_divergence')
+    if len(text_embedding_kl_loss) > 0:
+        text_embedding_kl_loss = tfutil.autosummary('Loss/text_embedding_kl', text_embedding_kl_loss[0])
+        loss += text_embedding_kl_loss
+
     return loss
 
 #----------------------------------------------------------------------------

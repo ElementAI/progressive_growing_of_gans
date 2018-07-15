@@ -105,10 +105,30 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
 # Function to transform condition, e.g. labels or text embedding before feeding into film layers
 
 def embed_condition(x, fmaps):
-    x = dense(x, fmaps)
-    x = apply_bias(x)
-    x = leaky_relu(x)
-    return x
+
+    with tf.variable_scope('TextEmbedding'):
+        x = dense(x, 2 * fmaps)
+        x = apply_bias(x)
+        x = leaky_relu(x)
+        mu = x[:, :fmaps]
+        log_sigma = x[:, fmaps:]
+
+        embedding_kl_loss = KL_loss(mu, log_sigma)
+
+        epsilon = tf.truncated_normal(tf.shape(mu))
+        stddev = tf.exp(log_sigma)
+        text_embed = mu + stddev * epsilon
+
+    return text_embed, embedding_kl_loss
+
+
+#----------------------------------------------------------------------------
+# reduce_mean normalize also the dimension of the embeddings
+def KL_loss(mu, log_sigma):
+    with tf.name_scope("KL_divergence"):
+        loss = -log_sigma + .5 * (-1 + tf.exp(2. * log_sigma) + tf.square(mu))
+        loss = tf.reduce_mean(loss)
+        return loss
 
 
 #----------------------------------------------------------------------------
@@ -286,8 +306,8 @@ def G_film(
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
-        with tf.variable_scope('TextEmbedding'):
-            text_embed = embed_condition(text_embed, fmaps=latent_size)
+        text_embed, embedding_kl_loss = embed_condition(text_embed, fmaps=latent_size)
+        tf.add_to_collection(name=tf.GraphKeys.REGULARIZATION_LOSSES, value=embedding_kl_loss)
 
         x = block(combo_in, 2, text_embed=text_embed, **kwargs)
         images_out = torgb(x, 2)
