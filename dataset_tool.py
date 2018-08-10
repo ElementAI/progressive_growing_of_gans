@@ -486,6 +486,11 @@ def get_pose_from_ssense_img_name(img_name):
     return int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
 
 
+def get_category_from_json(json_content):
+    # category could be either "category" or "subcategory"
+    return json_content['subcategory']
+
+
 def ssense_clean(ssense_dir, image_filenames):
     category_set = set()
     category_max_pose = {}
@@ -495,7 +500,7 @@ def ssense_clean(ssense_dir, image_filenames):
         json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
         pose_current = get_pose_from_ssense_img_name(img_name)
         pose.append(pose_current)
-        category_current = json_content['subcategory']
+        category_current = get_category_from_json(json_content)
         category.append(category_current)
         category_set.add(category_current)
         category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
@@ -537,7 +542,7 @@ def create_ssense_class_grids(tfrecord_dir, ssense_dir, resolution=128, mode=Non
         json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
         pose_current = get_pose_from_ssense_img_name(img_name)
         pose.append(pose_current)
-        category_current = json_content['subcategory']
+        category_current = get_category_from_json(json_content)
         category.append(category_current)
         category_set.add(category_current)
         category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
@@ -547,7 +552,7 @@ def create_ssense_class_grids(tfrecord_dir, ssense_dir, resolution=128, mode=Non
 
     gh = 6
     tfr = TFRecordExporter(tfrecord_dir, len(image_filenames))
-    for category_current in category:
+    for category_current in category_set:
         category_images[category_current] = list(set(category_images[category_current]))
         gw = min(20, len(category_images[category_current]))
         items_select = np.array(category_images[category_current], dtype=np.int64)
@@ -573,6 +578,93 @@ def create_ssense_class_grids(tfrecord_dir, ssense_dir, resolution=128, mode=Non
         pathlib.Path(tfr.tfr_prefix).mkdir(parents=True, exist_ok=True)
         misc.save_image_grid(images, filename, drange=[0, 255], grid_size=(gw, gh))
 
+
+def create_ssense_pdf_report(tfrecord_dir, ssense_dir, resolution=64):
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_JUSTIFY
+    from reportlab.lib.utils import ImageReader
+    from reportlab.lib.units import inch
+    from io import BytesIO
+
+    img_size = 0.5*inch
+
+    paragraph_style = ParagraphStyle(name='Normal', fontName='Helvetica', fontSize=6)
+    paragraph_style.spaceBefore = 0.1 * inch
+    paragraph_style.alignment = TA_JUSTIFY
+
+    page_w, page_h = letter
+    canvas = canvas.Canvas(os.path.join(ssense_dir, 'fashion_dataset_report.pdf'), pagesize=letter)
+    canvas.setLineWidth(.3)
+    canvas.setFont('Helvetica', 12)
+
+    print('Loading SSENSE from "%s"' % ssense_dir)
+    glob_pattern = os.path.join(ssense_dir, '*.png')
+    image_filenames = sorted(glob.glob(glob_pattern))
+
+    category_set = set()
+    category_max_pose = {}
+    category_images = {}
+    pose = []
+    category = []
+    for idx, img_name in enumerate(tqdm(image_filenames)):
+        json_content = get_json_from_ssense_img_name(ssense_dir, img_name)
+        pose_current = get_pose_from_ssense_img_name(img_name)
+        pose.append(pose_current)
+        category_current = get_category_from_json(json_content)
+        category.append(category_current)
+        category_set.add(category_current)
+        category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
+
+        img_name_no_pose = img_name.split('/')[-1].split('_')[0]
+        category_images[category_current] = category_images.get(category_current, []) + [img_name_no_pose]
+
+    for category_idx, category_current in enumerate(category_set):
+        print("Processing category %s, %d out of %d" % (category_current, category_idx+1, len(category_set)))
+
+        category_images[category_current] = list(set(category_images[category_current]))
+        gw = min(15, len(category_images[category_current]))
+        items_select = np.array(category_images[category_current], dtype=np.int64)
+        items_select = np.random.choice(np.arange(len(items_select)), size=gw, replace=False)
+        items_select = [category_images[category_current][i] for i in items_select]
+
+        current_y = page_h - inch
+        paragraph = Paragraph(category_current, paragraph_style)
+        paragraph.wrap(page_w - 2 * inch, page_h - 2 * inch)
+        paragraph.drawOn(canvas, x=inch, y=current_y - paragraph.height)
+        current_y -= paragraph.height
+        for item in range(gw):
+            current_x = inch
+
+            json_content = get_json_from_ssense_img_name(ssense_dir, items_select[item] + '_bid_gridfs_1.png')
+            paragraph = Paragraph(json_content['description'], paragraph_style)
+            paragraph.wrap(page_w-2*inch, page_h-2*inch)
+            paragraph.drawOn(canvas, x=current_x, y=current_y-paragraph.height)
+            current_y -= paragraph.height + paragraph_style.spaceBefore
+
+            for pose in range(6):
+                img_name = items_select[item] + '_bid_gridfs_' + str(pose+1) + '.png'
+                img_bytes = BytesIO()
+                try:
+                    img = PIL.Image.open(os.path.join(ssense_dir, img_name))
+                    if resolution != 1024:
+                        img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
+                except:
+                    img = 0 * np.ones(shape=(resolution, resolution, 3), dtype=np.uint8)
+                    img = PIL.Image.fromarray(img)
+
+                img.save(img_bytes, format='png')
+                img_bytes.seek(0)
+                canvas.drawImage(ImageReader(img_bytes), x=current_x, y=current_y-img_size, width=img_size, height=img_size)
+                current_x += img_size + 0.1 * img_size
+
+            current_y -= img_size
+        # Finishes the page
+        canvas.showPage()
+
+    canvas.save()
 
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # mode: None usual dataset creation mode
@@ -612,14 +704,14 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
                 meta_data['pose'] = int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
                 meta_data['description'] = json_content['description'].encode()
 
-                labels.append(json_content['subcategory'])
-                category.add(json_content['subcategory'])
+                labels.append(get_category_from_json(json_content))
+                category.add(get_category_from_json(json_content))
             # add image to tfrecord
             if mode is None:
                 tfr.add_image(img, meta_data=None)
             elif mode == 'examples':
                 if np.random.uniform() < 0.01:
-                    folder_name = os.path.join(tfr.tfr_prefix, json_content['subcategory'])
+                    folder_name = os.path.join(tfr.tfr_prefix, get_category_from_json(json_content))
                     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
                     img_example = PIL.Image.fromarray(img.transpose(1,2,0)).resize((128, 128), PIL.Image.ANTIALIAS)
                     img_example.save(os.path.join(folder_name, img_name.split('/')[-1]))
@@ -887,6 +979,12 @@ def execute_cmdline(argv):
     p.add_argument('--resolution', help='Output resolution (default: 1024)', type=int, default=128)
     p.add_argument('--mode', help='script modes', type=str, default=None, choices=[None, 'examples'])
 
+    p = add_command('create_ssense_pdf_report', 'Creates a pdf file with examples of images and image descriptions')
+    p.add_argument('--tfrecord_dir', help='New dataset directory to be created', type=str,
+                   default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
+    p.add_argument('--ssense_dir', help='Directory containing SSENSE', type=str,
+                   default='/mnt/scratch/ssense/data_dumps/images_png_dump')
+    p.add_argument('--resolution', help='Output resolution (default: 1024)', type=int, default=128)
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
                                             'create_cifar100 datasets/cifar100 ~/downloads/cifar100')
