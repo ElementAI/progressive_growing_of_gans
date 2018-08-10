@@ -982,8 +982,8 @@ def execute_cmdline(argv):
     p.add_argument('--mode', help='script modes', type=str, default=None, choices=[None, 'examples'])
 
     p = add_command('create_ssense_pdf_report', 'Creates a pdf file with examples of images and image descriptions')
-    p.add_argument('--tfrecord_dir', help='New dataset directory to be created', type=str,
-                   default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
+    p.add_argument('--ssense_dir', help='Directory containing SSENSE', type=str,
+                   default='/mnt/scratch/ssense/data_dumps/images_png_dump')
     p.add_argument('--resolution', help='Output resolution (default: 1024)', type=int, default=128)
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
