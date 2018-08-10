@@ -579,7 +579,7 @@ def create_ssense_class_grids(tfrecord_dir, ssense_dir, resolution=128, mode=Non
         misc.save_image_grid(images, filename, drange=[0, 255], grid_size=(gw, gh))
 
 
-def create_ssense_pdf_report(tfrecord_dir, ssense_dir, resolution=64):
+def create_ssense_pdf_report(ssense_dir, resolution=64):
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import Paragraph
@@ -639,7 +639,9 @@ def create_ssense_pdf_report(tfrecord_dir, ssense_dir, resolution=64):
             current_x = inch
 
             json_content = get_json_from_ssense_img_name(ssense_dir, items_select[item] + '_bid_gridfs_1.png')
-            paragraph = Paragraph(json_content['description'], paragraph_style)
+            text = json_content['description']
+            text = text.replace("<", "").replace(">", "")
+            paragraph = Paragraph(text, paragraph_style)
             paragraph.wrap(page_w-2*inch, page_h-2*inch)
             paragraph.drawOn(canvas, x=current_x, y=current_y-paragraph.height)
             current_y -= paragraph.height + paragraph_style.spaceBefore
@@ -982,8 +984,6 @@ def execute_cmdline(argv):
     p = add_command('create_ssense_pdf_report', 'Creates a pdf file with examples of images and image descriptions')
     p.add_argument('--tfrecord_dir', help='New dataset directory to be created', type=str,
                    default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
-    p.add_argument('--ssense_dir', help='Directory containing SSENSE', type=str,
-                   default='/mnt/scratch/ssense/data_dumps/images_png_dump')
     p.add_argument('--resolution', help='Output resolution (default: 1024)', type=int, default=128)
 
     p = add_command(    'create_cifar100',  'Create dataset for CIFAR-100.',
