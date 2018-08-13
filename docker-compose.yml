@@ -1,0 +1,12 @@
+version: '3.5'
+services:
+  notebook:
+    volumes:
+      - ./:/experiment/
+      - /mnt/scratch/ssense/data_dumps/:/data
+      - /mnt/scratch/ssense/models/:/models
+    ports:
+      - "9999:9999"
+    build:
+      shm_size: '8gb'
+      context: .
