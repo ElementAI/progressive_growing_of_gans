@@ -262,8 +262,8 @@ def G_film(
 
     latents_in.set_shape([None, latent_size])
     labels_in.set_shape([None, label_size])
-    combo_in = tf.cast(tf.concat([latents_in, labels_in], axis=1), dtype)
-    text_embed = combo_in  # tf.cast(labels_in, dtype)
+    combo_in = tf.cast(latents_in, dtype)
+    text_embed = tf.cast(labels_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
 
     # Building blocks.
@@ -306,8 +306,8 @@ def G_film(
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
-        # text_embed, embedding_kl_loss = embed_condition(text_embed, fmaps=latent_size)
-        # tf.add_to_collection(name=tf.GraphKeys.REGULARIZATION_LOSSES, value=embedding_kl_loss)
+        text_embed, embedding_kl_loss = embed_condition(text_embed, fmaps=latent_size)
+        tf.add_to_collection(name=tf.GraphKeys.REGULARIZATION_LOSSES, value=embedding_kl_loss)
 
         x = block(combo_in, 2, text_embed=text_embed, **kwargs)
         images_out = torgb(x, 2)
