@@ -492,8 +492,11 @@ def get_category_from_json(json_content):
 
 
 def ssense_clean(ssense_dir, image_filenames):
+    MIN_IMAGES_PER_CATEGORY = 100
+
     category_set = set()
     category_max_pose = {}
+    category_counts = {}
     pose = []
     category = []
     for idx, img_name in enumerate(tqdm(image_filenames)):
@@ -504,6 +507,7 @@ def ssense_clean(ssense_dir, image_filenames):
         category.append(category_current)
         category_set.add(category_current)
         category_max_pose[category_current] = max(category_max_pose.get(category_current, 0), pose_current)
+        category_counts[category_current] = category_counts.get(category_current, 0) + 1
     # This is to exclude the category with no name
     category_max_pose["b''"] = -1
     print("Number of categories: ", len(category_max_pose))
@@ -514,10 +518,15 @@ def ssense_clean(ssense_dir, image_filenames):
     pose_distribution = np.bincount(pose)
     print("Pose frequencies: ")
     print(list(zip(np.arange(len(pose_distribution)), pose_distribution)))
+    print("Number of images in categories: ")
+    print(category_counts)
 
     image_filenames_clean = []
     for idx, img_name in enumerate(tqdm(image_filenames)):
         category_current = category[idx]
+        if category_counts.get(category_current, 0) < MIN_IMAGES_PER_CATEGORY:
+            # Discard category with too few images
+            continue
         if pose[idx] < min(4, category_max_pose.get(category_current, 6)):
             image_filenames_clean.append(img_name)
 
@@ -667,6 +676,7 @@ def create_ssense_pdf_report(ssense_dir, resolution=64):
         canvas.showPage()
 
     canvas.save()
+
 
 def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # mode: None usual dataset creation mode
