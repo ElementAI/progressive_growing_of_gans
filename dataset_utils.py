@@ -85,7 +85,7 @@ class Vocabulary:
             self.idx2word[i] = word
 
         logger = logging.getLogger(__name__)
-        logger.info("Loaded dictionary with %d words" % len(self.idx2word))
+        logger.info("Build a dictionary with %d words" % len(self.idx2word))
 
     def __word2idx(self, word: str) -> int:
         return self.word2idx.get(word, self.word2idx['UNK'])
