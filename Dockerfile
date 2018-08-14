@@ -32,12 +32,10 @@ RUN mkdir -p -m 700 /root/.jupyter/ && \
 # > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
 ENV LANG C.UTF-8
 
-RUN conda install -y numpy pymongo scipy pandas jupyter pillow requests matplotlib tqdm \
-    h5py
+COPY ./requirements-pip.txt .
+RUN pip install --upgrade pip
+RUN pip install -r requirements-pip.txt
 
-RUN conda install -c aaronzs tensorflow-gpu==1.8.0
-RUN pip install celery statsmodels gitpython
 
 ENTRYPOINT [ "/usr/bin/tini", "--" ]
-
-CMD ["jupyter", "notebook", "--allow-root"]
+CMD ["jupyter", "notebook", "--allow-root", "--port=9999", "--no-browser"]
