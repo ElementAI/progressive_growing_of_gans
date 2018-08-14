@@ -127,7 +127,7 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.info('Loading data from %s' % args.input_path)
 
-    # build an interator
+    # build an iterator
     words = stream_words_from_h5py(args.input_path, normalize)
 
     # build the vocabulary
