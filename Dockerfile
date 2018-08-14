@@ -36,6 +36,7 @@ COPY ./requirements-pip.txt .
 RUN pip install --upgrade pip
 RUN pip install -r requirements-pip.txt
 
-
+WORKDIR /experiment
 ENTRYPOINT [ "/usr/bin/tini", "--" ]
+
 CMD ["jupyter", "notebook", "--allow-root", "--port=9999", "--no-browser"]
