@@ -102,7 +102,7 @@ class Vocabulary:
         return ' '.join([self.idx2word[idx] for idx in idxs])
 
     def __str__(self) -> str:
-        return "Vocab with %d words, word limit of %d, minimum allowed count: %d" % (
+        return "Vocab with %d words, word limit of %s, minimum allowed count: %s" % (
             len(self), self.word_limit, self.min_count)
 
 
