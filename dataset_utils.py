@@ -19,7 +19,7 @@ def normalize(text: str,
 
     Arguments:
         text       - text to be processed
-        black_list - string with blacklisted charcters
+        black_list - string with blacklisted characters
         vocab      - if set, filters words not in the vocab
         lowercase  - if True, lowercases the words
         tokenize   - if True, returns a list of tokens
@@ -39,7 +39,7 @@ def normalize(text: str,
 def stream_words_from_h5py(
         file_path: str,
         preprocessing_fn: Callable[[str], List[str]]) -> Iterator[str]:
-    ''' Returns an interator streaming words from the source h5py file
+    ''' Returns an iterator streaming words from the source HDF5 file
 
     Arguments:
         file_path         - absolute path to the file
@@ -71,6 +71,8 @@ class Vocabulary:
         self.word2idx = {'UNK': 0, '<EOS>': 1, '<PAD>': 2}
         self.idx2word = {v: k for k, v in self.word2idx.items()}
         self.preprocessing_fn = preprocessing_fn
+        self.min_count = min_count
+        self.word_limit = word_limit
 
         self.counts = Counter(words)
         if min_count:
@@ -99,6 +101,10 @@ class Vocabulary:
     def decode(self, idxs: List[int]) -> str:
         return ' '.join([self.idx2word[idx] for idx in idxs])
 
+    def __str__(self) -> str:
+        return "Vocab with %d words, word limit of %d, minimum allowed count: %d" % (
+            len(self), self.word_limit, self.min_count)
+
 
 if __name__ == '__main__':
     import argparse
@@ -107,7 +113,7 @@ if __name__ == '__main__':
     import pickle
 
     parser = argparse.ArgumentParser(description='Script to build and save vocabulary')
-    parser.add_argument('input_path', help='Directory containing H5 dataset')
+    parser.add_argument('input_path', help='Directory containing HDF5 dataset')
     parser.add_argument('output_path', help='Directory where to store the vocabulary')
 
     parser.add_argument('--min_count', type=int, help='if set, filters word less frequent than the limit')
@@ -127,6 +133,7 @@ if __name__ == '__main__':
     # build the vocabulary
     vocab = Vocabulary(words, normalize, min_count=args.min_count, word_limit=args.word_limit)
 
+    logger.info("Saving %s to %s" % (str(vocab), args.output_path))
     with open(os.path.join(args.output_path, 'vocab.pickle'), 'wb') as f:
         pickle.dump(vocab, f, pickle.HIGHEST_PROTOCOL)
 
