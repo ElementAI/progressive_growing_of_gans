@@ -2,7 +2,7 @@ import h5py
 import string
 import logging
 
-from collections import Counter
+from collections import Counter, defaultdict
 from itertools import islice, tee
 from typing import Iterator, List, Set, Optional, Union, Callable, Tuple
 
@@ -139,6 +139,36 @@ def build_vocab(input_path: str,
         json.dump(vocab.counts, f, indent=4)
 
 
+def save_encoded(data_path: str,
+                 vocab_path: str,
+                 add_text: bool = False) -> None:
+    ''' Save mapping from product id to product description '''
+    import os
+    import pickle
+    import h5py
+
+    keys = ['input_productID', 'input_description']
+
+    id2desc = defaultdict(dict)
+    vocabulary = pickle.load(open(os.path.join(vocab_path, 'vocab.pickle'), 'rb'))
+
+    logger = logging.getLogger(__name__)
+    logger.info('Building id2desc')
+
+    with h5py.File(data_path, 'r') as f:
+        for product_id, description in tqdm(zip(*[f[k] for k in keys])):
+            product_id = product_id[0]
+            description = description[0].decode('latin1')
+            if product_id not in id2desc:
+                id2desc[product_id]['encoded'] = vocabulary.encode(description)
+                if add_text:
+                    id2desc[product_id]['text'] = description
+
+    logger.info('Saving id2desc')
+    with open(os.path.join(vocab_path, 'id2desc.pickle'), 'wb') as f:
+        pickle.dump(id2desc, f, pickle.HIGHEST_PROTOCOL)
+
+
 def consume(iterator, n=None):
     ''' Advance the iterator n-steps ahead. If n is None, consume entirely '''
     # Use functions that consume iterators at C speed.
@@ -223,6 +253,12 @@ def execute_cmdline(argv):
     p.add_argument('--min_count', type=int, help='if set, filters word less frequent than the limit')
     p.add_argument('--word_limit', type=int, help='if set, cuts of the number of words used to build'
                                                    'the dictionary')
+
+    # add command to build n-grams
+    p = add_command('save_encoded', 'Calculates the token n-grams')
+    p.add_argument('data_path', help='Directory containing HDF5 dataset')
+    p.add_argument('vocab_path', help='Directory containing pickled vocabulary')
+    p.add_argument('--add-text', help='Whether to store source text or not', action='store_true')
 
     # add command to build n-grams
     p = add_command('save_ngrams', 'Calculates the token n-grams')
