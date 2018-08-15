@@ -87,8 +87,15 @@ class TFRecordExporter:
             feature = {'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
                        'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}
             if meta_data is not None:
-                for key, val in meta_data.items():
-                    feature[key] = tf.train.Feature(bytes_list=tf.train.Int64List(value=val))
+                for key, (val, type_) in meta_data.items():
+                    if type_ is int:
+                        feature[key] = tf.train.Feature(int64_list=tf.train.Int64List(value=val))
+                    elif type_ is str:
+                        feature[key] = tf.train.Feature(bytes_list=tf.train.BytesList(value=val))
+                    elif type_ is float:
+                        feature[key] = tf.train.Feature(float_list=tf.train.FloatList(value=val))
+                    else:
+                        raise ValueError('Expected a type')
 
             ex = tf.train.Example(features=tf.train.Features(feature=feature))
             tfr_writer.write(ex.SerializeToString())
@@ -701,11 +708,14 @@ def create_ssense_pdf_report(ssense_dir, resolution=64):
     canvas.save()
 
 
-def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
+def create_ssense(tfrecord_dir: str,
+                  ssense_dir: str,
+                  desc_path: str,
+                  resolution: int = 1024,
+                  mode=None):
     # mode: None usual dataset creation mode
     # mode: 'examples' save subset of image examples categorized in folders by category
-
-    # import matplotlib.pyplot as plt
+    import pickle
 
     print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
@@ -718,6 +728,8 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # if len(image_filenames) != expected_images:
     #     error('Expected to find %d images' % expected_images)
 
+    print("Loading dictionary mapping product id to its description %s " % desc_path)
+    id2desc = pickle.load(open(desc_path, 'rb'))
     with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
         order = tfr.choose_shuffled_order()
         labels = []
@@ -729,26 +741,30 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
             if resolution != 1024:
                 img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
             img = np.asarray(img)
-            img = img.transpose(2, 0, 1) # HWC => CHW
+            img = img.transpose(2, 0, 1)  # HWC => CHW
 
             # Handle meta data
-            json_name = img_name.split('/')[-1].split('_')[0] + '.json'
+            file_name, ext = os.path.splittext(os.path.basename(img_name))
+            product_id, *_, pose_id = file_name.split('_')
+            json_name = '%s.json' % product_id
             meta_data = {}
             with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
                 json_content = json.load(f)
-                meta_data['pose'] = int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
-                meta_data['description'] = json_content['description'].encode()
+                meta_data['pose'] = ([int(pose_id)], int)
+                meta_data['description'] = (json_content['description'].encode(), str)
+                meta_data['encoded'] = (id2desc[product_id]['encoded'], int)
 
                 labels.append(get_category_from_json(json_content))
                 category.add(get_category_from_json(json_content))
+
             # add image to tfrecord
             if mode is None:
-                tfr.add_image(img, meta_data=None)
+                tfr.add_image(img, meta_data)
             elif mode == 'examples':
                 if np.random.uniform() < 0.01:
                     folder_name = os.path.join(tfr.tfr_prefix, get_category_from_json(json_content))
                     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
-                    img_example = PIL.Image.fromarray(img.transpose(1,2,0)).resize((128, 128), PIL.Image.ANTIALIAS)
+                    img_example = PIL.Image.fromarray(img.transpose(1, 2, 0)).resize((128, 128), PIL.Image.ANTIALIAS)
                     img_example.save(os.path.join(folder_name, img_name.split('/')[-1]))
 
             # plt.imshow(np.transpose(img, [1, 2, 0]))
