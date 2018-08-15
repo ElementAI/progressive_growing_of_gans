@@ -234,18 +234,6 @@ class SyntheticDataset:
 # Helper func for constructing a dataset object using the given options.
 
 
-# ----------------------------------------------------------------------------
-# Dataset class that loads multimodal data from tfrecords files.
-
-
-class MultimodlTFRecordDataset:
-    '''
-    TODO: Think how to implement it
-    '''
-    pass
-# ----------------------------------------------------------------------------
-
-
 def load_dataset(class_name='dataset.TFRecordDataset', data_dir=None, verbose=False, **kwargs):
     adjusted_kwargs = dict(kwargs)
     if 'tfrecord_dir' in adjusted_kwargs and data_dir is not None:

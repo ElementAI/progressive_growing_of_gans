@@ -109,9 +109,6 @@ class TFRecordExporter:
         with open(self.tfr_prefix + '-rxx.labels', 'wb') as f:
             np.save(f, labels.astype(np.float32))
 
-    def add_description(self, description: str) -> None:
-        pass
-
     def __enter__(self):
         return self
 
