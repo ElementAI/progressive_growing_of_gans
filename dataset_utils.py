@@ -258,7 +258,7 @@ def execute_cmdline(argv):
     p = add_command('save_encoded', 'Calculates the token n-grams')
     p.add_argument('data_path', help='Directory containing HDF5 dataset')
     p.add_argument('vocab_path', help='Directory containing pickled vocabulary')
-    p.add_argument('--add-text', help='Whether to store source text or not', action='store_true')
+    p.add_argument('--add_text', help='Whether to store source text or not', action='store_true')
 
     # add command to build n-grams
     p = add_command('save_ngrams', 'Calculates the token n-grams')

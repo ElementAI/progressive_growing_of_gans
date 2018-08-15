@@ -86,6 +86,7 @@ class TFRecordExporter:
             quant = np.rint(img).clip(0, 255).astype(np.uint8)
             feature = {'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
                        'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}
+
             if meta_data is not None:
                 for key, (val, type_) in meta_data.items():
                     if type_ is int:
@@ -712,6 +713,7 @@ def create_ssense(tfrecord_dir: str,
                   ssense_dir: str,
                   desc_path: str,
                   resolution: int = 1024,
+                  add_text: bool = False,
                   mode=None):
     # mode: None usual dataset creation mode
     # mode: 'examples' save subset of image examples categorized in folders by category
@@ -751,8 +753,10 @@ def create_ssense(tfrecord_dir: str,
             with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
                 json_content = json.load(f)
                 meta_data['pose'] = ([int(pose_id)], int)
-                meta_data['description'] = (json_content['description'].encode(), str)
-                meta_data['encoded'] = (id2desc[product_id]['encoded'], int)
+                meta_data['word_ids'] = (id2desc[product_id]['encoded'], int)
+                if add_text:
+                    meta_data['description'] = (json_content['description'].encode(), str)
+
 
                 labels.append(get_category_from_json(json_content))
                 category.add(get_category_from_json(json_content))
@@ -1020,6 +1024,7 @@ def execute_cmdline(argv):
     p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/images_png_dump')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=128)
     p.add_argument(     '--mode',           help='script modes', type=str,  default=None, choices=[None, 'examples'])
+    p.add_argument(     '--add_text',       help='Store description in metadata', action='store_true')
 
     p = add_command('create_ssense_class_grids', 'Create grid images with examples of class images',
                     'create_ssense datasets/SSENSE ~/downloads/SSENSE')
