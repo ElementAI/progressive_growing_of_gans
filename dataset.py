@@ -11,7 +11,7 @@ import numpy as np
 import tensorflow as tf
 import tfutil
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Parse individual image from a tfrecords file.
 
 def parse_tfrecord_tf(record):
@@ -28,8 +28,9 @@ def parse_tfrecord_np(record):
     data = ex.features.feature['data'].bytes_list.value[0]
     return np.fromstring(data, np.uint8).reshape(shape)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Dataset class that loads data from tfrecords files.
+
 
 class TFRecordDataset:
     def __init__(self,
@@ -97,7 +98,7 @@ class TFRecordDataset:
 
         # Load labels.
         assert max_label_size == 'full' or max_label_size >= 0
-        self._np_labels = np.zeros([1<<20, 0], dtype=np.float32)
+        self._np_labels = np.zeros([1 << 20, 0], dtype=np.float32)
         if self.label_file is not None and max_label_size != 0:
             self._np_labels = np.load(self.label_file)
             assert self._np_labels.ndim == 2
@@ -128,8 +129,14 @@ class TFRecordDataset:
                     dset = dset.prefetch(((prefetch_mb << 20) - 1) // bytes_per_item + 1)
                 dset = dset.batch(self._tf_minibatch_in)
                 self._tf_datasets[tfr_lod] = dset
-            self._tf_iterator = tf.data.Iterator.from_structure(self._tf_datasets[0].output_types, self._tf_datasets[0].output_shapes)
-            self._tf_init_ops = {lod: self._tf_iterator.make_initializer(dset) for lod, dset in self._tf_datasets.items()}
+
+            self._tf_iterator = tf.data.Iterator.from_structure(
+                self._tf_datasets[0].output_types,
+                self._tf_datasets[0].output_shapes)
+
+            self._tf_init_ops = {
+                lod: self._tf_iterator.make_initializer(dset) for lod, dset in self._tf_datasets.items()
+            }
 
     # Use the given minibatch size and level-of-detail for the data returned by get_minibatch_tf().
     def configure(self, minibatch_size, lod=0):
@@ -141,31 +148,32 @@ class TFRecordDataset:
             self._cur_lod = lod
 
     # Get next minibatch as TensorFlow expressions.
-    def get_minibatch_tf(self): # => images, labels
+    def get_minibatch_tf(self):  # => images, labels
         return self._tf_iterator.get_next()
 
     # Get next minibatch as NumPy arrays.
-    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
+    def get_minibatch_np(self, minibatch_size, lod=0):  # => images, labels
         self.configure(minibatch_size, lod)
         if self._tf_minibatch_np is None:
             self._tf_minibatch_np = self.get_minibatch_tf()
         return tfutil.run(self._tf_minibatch_np)
 
     # Get random labels as TensorFlow expression.
-    def get_random_labels_tf(self, minibatch_size): # => labels
+    def get_random_labels_tf(self, minibatch_size):  # => labels
         if self.label_size > 0:
             return tf.gather(self._tf_labels_var, tf.random_uniform([minibatch_size], 0, self._np_labels.shape[0], dtype=tf.int32))
         else:
             return tf.zeros([minibatch_size, 0], self.label_dtype)
 
     # Get random labels as NumPy array.
-    def get_random_labels_np(self, minibatch_size): # => labels
+    def get_random_labels_np(self, minibatch_size):  # => labels
         if self.label_size > 0:
             return self._np_labels[np.random.randint(self._np_labels.shape[0], size=[minibatch_size])]
         else:
             return np.zeros([minibatch_size, 0], self.label_dtype)
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
 # Base class for datasets that are generated on the fly.
 
 class SyntheticDataset:
@@ -192,7 +200,7 @@ class SyntheticDataset:
         assert minibatch_size >= 1 and lod >= 0 and lod <= self.resolution_log2
         tfutil.set_vars({self._tf_minibatch_var: minibatch_size, self._tf_lod_var: lod})
 
-    def get_minibatch_tf(self): # => images, labels
+    def get_minibatch_tf(self):  # => images, labels
         with tf.name_scope('SyntheticDataset'):
             shrink = tf.cast(2.0 ** tf.cast(self._tf_lod_var, tf.float32), tf.int32)
             shape = [self.shape[0], self.shape[1] // shrink, self.shape[2] // shrink]
@@ -200,30 +208,43 @@ class SyntheticDataset:
             labels = self._generate_labels(self._tf_minibatch_var)
             return images, labels
 
-    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
+    def get_minibatch_np(self, minibatch_size, lod=0):  # => images, labels
         self.configure(minibatch_size, lod)
         if self._tf_minibatch_np is None:
             self._tf_minibatch_np = self.get_minibatch_tf()
         return tfutil.run(self._tf_minibatch_np)
 
-    def get_random_labels_tf(self, minibatch_size): # => labels
+    def get_random_labels_tf(self, minibatch_size):  # => labels
         with tf.name_scope('SyntheticDataset'):
             return self._generate_labels(minibatch_size)
 
-    def get_random_labels_np(self, minibatch_size): # => labels
+    def get_random_labels_np(self, minibatch_size):  # => labels
         self.configure(minibatch_size)
         if self._tf_labels_np is None:
             self._tf_labels_np = self.get_random_labels_tf()
         return tfutil.run(self._tf_labels_np)
 
-    def _generate_images(self, minibatch, lod, shape): # to be overridden by subclasses
+    def _generate_images(self, minibatch, lod, shape):  # to be overridden by subclasses
         return tf.zeros([minibatch] + shape, self.dtype)
 
-    def _generate_labels(self, minibatch): # to be overridden by subclasses
+    def _generate_labels(self, minibatch):  # to be overridden by subclasses
         return tf.zeros([minibatch, self.label_size], self.label_dtype)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Helper func for constructing a dataset object using the given options.
+
+
+# ----------------------------------------------------------------------------
+# Dataset class that loads multimodal data from tfrecords files.
+
+
+class MultimodlTFRecordDataset:
+    '''
+    TODO: Think how to implement it
+    '''
+    pass
+# ----------------------------------------------------------------------------
+
 
 def load_dataset(class_name='dataset.TFRecordDataset', data_dir=None, verbose=False, **kwargs):
     adjusted_kwargs = dict(kwargs)
@@ -238,4 +259,4 @@ def load_dataset(class_name='dataset.TFRecordDataset', data_dir=None, verbose=Fa
         print('Label size    =', dataset.label_size)
     return dataset
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
