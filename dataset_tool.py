@@ -1016,9 +1016,10 @@ def execute_cmdline(argv):
     p.add_argument(     'cifar10_dir',      help='Directory containing CIFAR-10')
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
-                                            'create_ssense datasets/SSENSE ~/downloads/SSENSE')
-    p.add_argument(     '--tfrecord_dir',   help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
-    p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/images_png_dump')
+                                           'create_ssense datasets/SSENSE ~/downloads/SSENSE')
+    p.add_argument(     '--tfrecord_dir',   help='New dataset directory to be created', type=str, default='/data/tf_record_images_128_with_desc')
+    p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/data/images_png_dump')
+    p.add_argument(     '--desc_path',      help='Directory containing mapping', type=str, default='/data/vocab/id2desc.pickle')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=128)
     p.add_argument(     '--mode',           help='script modes', type=str,  default=None, choices=[None, 'examples'])
     p.add_argument(     '--add_text',       help='Store description in metadata', action='store_true')
