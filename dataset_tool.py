@@ -743,7 +743,7 @@ def create_ssense(tfrecord_dir: str,
             img = img.transpose(2, 0, 1)  # HWC => CHW
 
             # Handle meta data
-            file_name, ext = os.path.splittext(os.path.basename(img_name))
+            file_name, ext = os.path.splitext(os.path.basename(img_name))
             product_id, *_, pose_id = file_name.split('_')
             json_name = '%s.json' % product_id
             meta_data = {}
