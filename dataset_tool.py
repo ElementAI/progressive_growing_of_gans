@@ -750,10 +750,10 @@ def create_ssense(tfrecord_dir: str,
             with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
                 json_content = json.load(f)
                 meta_data['pose'] = ([int(pose_id)], int)
-                meta_data['word_ids'] = (id2desc[product_id]['encoded'], int)
+                meta_data['word_ids'] = (id2desc[int(product_id)]['encoded'], int)
+
                 if add_text:
                     meta_data['description'] = (json_content['description'].encode(), str)
-
 
                 labels.append(get_category_from_json(json_content))
                 category.add(get_category_from_json(json_content))
