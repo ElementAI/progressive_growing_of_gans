@@ -23,13 +23,13 @@ import dataset
 import misc
 from tqdm import trange, tqdm
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def error(msg):
     print('Error: ' + msg)
     exit(1)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 class TFRecordExporter:
     def __init__(self, tfrecord_dir, expected_images, print_progress=True, progress_interval=10):
@@ -86,9 +86,17 @@ class TFRecordExporter:
             quant = np.rint(img).clip(0, 255).astype(np.uint8)
             feature = {'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
                        'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}
+
             if meta_data is not None:
-                for key, val in meta_data.items():
-                    feature[key] = tf.train.Feature(bytes_list=tf.train.Int64List(value=val))
+                for key, (val, type_) in meta_data.items():
+                    if type_ is int:
+                        feature[key] = tf.train.Feature(int64_list=tf.train.Int64List(value=val))
+                    elif type_ is str:
+                        feature[key] = tf.train.Feature(bytes_list=tf.train.BytesList(value=val))
+                    elif type_ is float:
+                        feature[key] = tf.train.Feature(float_list=tf.train.FloatList(value=val))
+                    else:
+                        raise ValueError('Expected a type')
 
             ex = tf.train.Example(features=tf.train.Features(feature=feature))
             tfr_writer.write(ex.SerializeToString())
@@ -100,21 +108,21 @@ class TFRecordExporter:
         assert labels.shape[0] == self.cur_images
         with open(self.tfr_prefix + '-rxx.labels', 'wb') as f:
             np.save(f, labels.astype(np.float32))
-            
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         self.close()
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 class ExceptionInfo(object):
     def __init__(self):
         self.value = sys.exc_info()[1]
         self.traceback = traceback.format_exc()
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 class WorkerThread(threading.Thread):
     def __init__(self, task_queue):
@@ -132,7 +140,7 @@ class WorkerThread(threading.Thread):
                 result = ExceptionInfo()
             result_queue.put((result, args))
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 class ThreadPool(object):
     def __init__(self, num_threads):
@@ -162,21 +170,29 @@ class ThreadPool(object):
         for idx in range(self.num_threads):
             self.task_queue.put((None, (), None))
 
-    def __enter__(self): # for 'with' statement
+    def __enter__(self):  # for 'with' statement
         return self
 
     def __exit__(self, *excinfo):
         self.finish()
 
-    def process_items_concurrently(self, item_iterator, process_func=lambda x: x, pre_func=lambda x: x, post_func=lambda x: x, max_items_in_flight=None):
-        if max_items_in_flight is None: max_items_in_flight = self.num_threads * 4
+    def process_items_concurrently(self,
+                                   item_iterator,
+                                   process_func=lambda x: x,
+                                   pre_func=lambda x: x,
+                                   post_func=lambda x: x,
+                                   max_items_in_flight=None):
+        ''' Process items '''
+        if max_items_in_flight is None:
+            max_items_in_flight = self.num_threads * 4
+
         assert max_items_in_flight >= 1
         results = []
         retire_idx = [0]
 
         def task_func(prepared, idx):
             return process_func(prepared)
-           
+
         def retire_result():
             processed, (prepared, idx) = self.get_result(task_func)
             results[idx] = processed
@@ -184,24 +200,28 @@ class ThreadPool(object):
                 yield post_func(results[retire_idx[0]])
                 results[retire_idx[0]] = None
                 retire_idx[0] += 1
-    
+
         for idx, item in enumerate(item_iterator):
             prepared = pre_func(item)
             results.append(None)
             self.add_task(func=task_func, args=(prepared, idx))
             while retire_idx[0] < idx - max_items_in_flight + 2:
-                for res in retire_result(): yield res
-        while retire_idx[0] < len(results):
-            for res in retire_result(): yield res
+                for res in retire_result():
+                    yield res
 
-#----------------------------------------------------------------------------
+        while retire_idx[0] < len(results):
+            for res in retire_result():
+                yield res
+
+# ----------------------------------------------------------------------------
+
 
 def display(tfrecord_dir):
     print('Loading dataset "%s"' % tfrecord_dir)
     tfutil.init_tf({'gpu_options.allow_growth': True})
     dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size='full', repeat=False, shuffle_mb=0)
     tfutil.init_uninited_vars()
-    
+
     idx = 0
     while True:
         try:
@@ -210,24 +230,25 @@ def display(tfrecord_dir):
             break
         if idx == 0:
             print('Displaying images')
-            import cv2 # pip install opencv-python
+            import cv2  # pip install opencv-python
             cv2.namedWindow('dataset_tool')
             print('Press SPACE or ENTER to advance, ESC to exit')
         print('\nidx = %-8d\nlabel = %s' % (idx, labels[0].tolist()))
-        cv2.imshow('dataset_tool', images[0].transpose(1, 2, 0)[:, :, ::-1]) # CHW => HWC, RGB => BGR
+        cv2.imshow('dataset_tool', images[0].transpose(1, 2, 0)[:, :, ::-1])  # CHW => HWC, RGB => BGR
         idx += 1
         if cv2.waitKey() == 27:
             break
     print('\nDisplayed %d images.' % idx)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def extract(tfrecord_dir, output_dir):
     print('Loading dataset "%s"' % tfrecord_dir)
     tfutil.init_tf({'gpu_options.allow_growth': True})
     dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size=0, repeat=False, shuffle_mb=0)
     tfutil.init_uninited_vars()
-    
+
     print('Extracting images to "%s"' % output_dir)
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -247,7 +268,8 @@ def extract(tfrecord_dir, output_dir):
         idx += 1
     print('Extracted %d images.' % idx)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
     max_label_size = 0 if ignore_labels else 'full'
@@ -257,7 +279,7 @@ def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
     print('Loading dataset "%s"' % tfrecord_dir_b)
     dset_b = dataset.TFRecordDataset(tfrecord_dir_b, max_label_size=max_label_size, repeat=False, shuffle_mb=0)
     tfutil.init_uninited_vars()
-    
+
     print('Comparing datasets')
     idx = 0
     identical_images = 0
@@ -290,7 +312,8 @@ def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
     if not ignore_labels:
         print('Identical labels: %d / %d' % (identical_labels, idx))
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_mnist(tfrecord_dir, mnist_dir):
     print('Loading MNIST from "%s"' % mnist_dir)
@@ -307,14 +330,15 @@ def create_mnist(tfrecord_dir, mnist_dir):
     assert np.min(labels) == 0 and np.max(labels) == 9
     onehot = np.zeros((labels.size, np.max(labels) + 1), dtype=np.float32)
     onehot[np.arange(labels.size), labels] = 1.0
-    
+
     with TFRecordExporter(tfrecord_dir, images.shape[0]) as tfr:
         order = tfr.choose_shuffled_order()
         for idx in range(order.size):
             tfr.add_image(images[order[idx]])
         tfr.add_labels(onehot[order])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_mnistrgb(tfrecord_dir, mnist_dir, num_images=1000000, random_seed=123):
     print('Loading MNIST from "%s"' % mnist_dir)
@@ -325,13 +349,14 @@ def create_mnistrgb(tfrecord_dir, mnist_dir, num_images=1000000, random_seed=123
     images = np.pad(images, [(0,0), (2,2), (2,2)], 'constant', constant_values=0)
     assert images.shape == (60000, 32, 32) and images.dtype == np.uint8
     assert np.min(images) == 0 and np.max(images) == 255
-    
+
     with TFRecordExporter(tfrecord_dir, num_images) as tfr:
         rnd = np.random.RandomState(random_seed)
         for idx in range(num_images):
             tfr.add_image(images[rnd.randint(images.shape[0], size=3)])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_cifar10(tfrecord_dir, cifar10_dir):
     print('Loading CIFAR-10 from "%s"' % cifar10_dir)
@@ -358,7 +383,8 @@ def create_cifar10(tfrecord_dir, cifar10_dir):
             tfr.add_image(images[order[idx]])
         tfr.add_labels(onehot[order])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_cifar100(tfrecord_dir, cifar100_dir):
     print('Loading CIFAR-100 from "%s"' % cifar100_dir)
@@ -380,7 +406,8 @@ def create_cifar100(tfrecord_dir, cifar100_dir):
             tfr.add_image(images[order[idx]])
         tfr.add_labels(onehot[order])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_svhn(tfrecord_dir, svhn_dir):
     print('Loading SVHN from "%s"' % svhn_dir)
@@ -407,7 +434,8 @@ def create_svhn(tfrecord_dir, svhn_dir):
             tfr.add_image(images[order[idx]])
         tfr.add_labels(onehot[order])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 def create_lsun(tfrecord_dir, lmdb_dir, resolution=256, max_images=None):
     print('Loading LSUN dataset from "%s"' % lmdb_dir)
@@ -440,7 +468,7 @@ def create_lsun(tfrecord_dir, lmdb_dir, resolution=256, max_images=None):
                 if tfr.cur_images == max_images:
                     break
         
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
     print('Loading CelebA from "%s"' % celeba_dir)
@@ -459,7 +487,7 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
             img = img.transpose(2, 0, 1) # HWC => CHW
             tfr.add_image(img)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 
 def str_to_int(str_set, str_labels):
@@ -678,11 +706,15 @@ def create_ssense_pdf_report(ssense_dir, resolution=64):
     canvas.save()
 
 
-def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
+def create_ssense(tfrecord_dir: str,
+                  ssense_dir: str,
+                  desc_path: str,
+                  resolution: int = 1024,
+                  add_text: bool = False,
+                  mode=None):
     # mode: None usual dataset creation mode
     # mode: 'examples' save subset of image examples categorized in folders by category
-
-    # import matplotlib.pyplot as plt
+    import pickle
 
     print('Loading SSENSE from "%s"' % ssense_dir)
     glob_pattern = os.path.join(ssense_dir, '*.png')
@@ -695,6 +727,8 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
     # if len(image_filenames) != expected_images:
     #     error('Expected to find %d images' % expected_images)
 
+    print("Loading dictionary mapping product id to its description %s " % desc_path)
+    id2desc = pickle.load(open(desc_path, 'rb'))
     with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
         order = tfr.choose_shuffled_order()
         labels = []
@@ -706,26 +740,32 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
             if resolution != 1024:
                 img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
             img = np.asarray(img)
-            img = img.transpose(2, 0, 1) # HWC => CHW
+            img = img.transpose(2, 0, 1)  # HWC => CHW
 
             # Handle meta data
-            json_name = img_name.split('/')[-1].split('_')[0] + '.json'
+            file_name, ext = os.path.splitext(os.path.basename(img_name))
+            product_id, *_, pose_id = file_name.split('_')
+            json_name = '%s.json' % product_id
             meta_data = {}
             with open(os.path.join(ssense_dir, 'images_metadata', json_name)) as f:
                 json_content = json.load(f)
-                meta_data['pose'] = int(img_name.split('/')[-1].split('_')[-1].split('.')[0])
-                meta_data['description'] = json_content['description'].encode()
+                meta_data['pose'] = ([int(pose_id)], int)
+                meta_data['word_ids'] = (id2desc[int(product_id)]['encoded'], int)
+
+                if add_text:
+                    meta_data['description'] = (json_content['description'].encode(), str)
 
                 labels.append(get_category_from_json(json_content))
                 category.add(get_category_from_json(json_content))
+
             # add image to tfrecord
             if mode is None:
-                tfr.add_image(img, meta_data=None)
+                tfr.add_image(img, meta_data)
             elif mode == 'examples':
                 if np.random.uniform() < 0.01:
                     folder_name = os.path.join(tfr.tfr_prefix, get_category_from_json(json_content))
                     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
-                    img_example = PIL.Image.fromarray(img.transpose(1,2,0)).resize((128, 128), PIL.Image.ANTIALIAS)
+                    img_example = PIL.Image.fromarray(img.transpose(1, 2, 0)).resize((128, 128), PIL.Image.ANTIALIAS)
                     img_example.save(os.path.join(folder_name, img_name.split('/')[-1]))
 
             # plt.imshow(np.transpose(img, [1, 2, 0]))
@@ -742,7 +782,7 @@ def create_ssense(tfrecord_dir, ssense_dir, resolution=1024, mode=None):
         with open(tfr.tfr_prefix+'-category_dictionary.json', 'w') as fp:
             json.dump(str_dict, fp)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def create_celebahq(tfrecord_dir, celeba_dir, delta_dir, num_threads=4, num_tasks=100):
     print('Loading CelebA from "%s"' % celeba_dir)
@@ -886,7 +926,7 @@ def create_celebahq(tfrecord_dir, celeba_dir, delta_dir, num_threads=4, num_task
             for img in pool.process_items_concurrently(indices[order].tolist(), process_func=process_func, max_items_in_flight=num_tasks):
                 tfr.add_image(img)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def create_from_images(tfrecord_dir, image_dir, shuffle):
     print('Loading images from "%s"' % image_dir)
@@ -913,7 +953,7 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
                 img = img.transpose(2, 0, 1) # HWC => CHW
             tfr.add_image(img)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
     print('Loading HDF5 archive from "%s"' % hdf5_filename)
@@ -928,7 +968,7 @@ def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
             if os.path.isfile(npy_filename):
                 tfr.add_labels(np.load(npy_filename)[order])
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def execute_cmdline(argv):
     prog = argv[0]
@@ -976,11 +1016,13 @@ def execute_cmdline(argv):
     p.add_argument(     'cifar10_dir',      help='Directory containing CIFAR-10')
 
     p = add_command(    'create_ssense',   'Create dataset for SSENSE',
-                                            'create_ssense datasets/SSENSE ~/downloads/SSENSE')
-    p.add_argument(     '--tfrecord_dir',   help='New dataset directory to be created', type=str, default='/mnt/scratch/ssense/data_dumps/tf_record_images_128')
-    p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/mnt/scratch/ssense/data_dumps/images_png_dump')
+                                           'create_ssense datasets/SSENSE ~/downloads/SSENSE')
+    p.add_argument(     '--tfrecord_dir',   help='New dataset directory to be created', type=str, default='/data/tf_record_images_128_with_desc')
+    p.add_argument(     '--ssense_dir',     help='Directory containing SSENSE', type=str, default='/data/images_png_dump')
+    p.add_argument(     '--desc_path',      help='Directory containing mapping', type=str, default='/data/vocab/id2desc.pickle')
     p.add_argument(     '--resolution',     help='Output resolution (default: 1024)', type=int, default=128)
     p.add_argument(     '--mode',           help='script modes', type=str,  default=None, choices=[None, 'examples'])
+    p.add_argument(     '--add_text',       help='Store description in metadata', action='store_true')
 
     p = add_command('create_ssense_class_grids', 'Create grid images with examples of class images',
                     'create_ssense datasets/SSENSE ~/downloads/SSENSE')
@@ -1045,9 +1087,10 @@ def execute_cmdline(argv):
     del args.command
     func(**vars(args))
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 if __name__ == "__main__":
     execute_cmdline(sys.argv)
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
