@@ -166,7 +166,7 @@ def get_logdir_name(flags):
     param_list = ['batch_size', str(flags.train_batch_size), 'steps', str(flags.number_of_steps),
                   'lr', str(flags.init_learning_rate), 'opt', flags.optimizer,
                   'weight_decay', str(flags.weight_decay),
-                  'nfilt', str(flags.num_filters), 'image_feature_extractor', str(flags.feature_extractor),
+                  'nfilt', str(flags.num_filters), 'image_feature_extractor', str(flags.image_feature_extractor),
                   ]
 
     if flags.log_dir == '':
