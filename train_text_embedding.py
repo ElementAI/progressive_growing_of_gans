@@ -80,7 +80,7 @@ def get_arguments():
     parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'])
     parser.add_argument('--augment', type=bool, default=False)
     # Learning rate paramteres
-    parser.add_argument('--lr_anneal', type=str, default='pwc', choices=['pwc'])
+    parser.add_argument('--lr_anneal', type=str, default='exp', choices=['exp'])
     parser.add_argument('--n_lr_decay', type=int, default=3)
     parser.add_argument('--lr_decay_rate', type=float, default=10.0)
     parser.add_argument('--num_steps_decay_pwc', type=int, default=2500,
@@ -336,13 +336,13 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
                                              trainable=is_training,
                                              scope='TextEmbedding')
 
-        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [flags.embedding_size]]
-        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [flags.embedding_size]]
+        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
+        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
         print(text.get_shape())
         initial_states_fw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_fw]
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
-        h, state = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cells_fw=cells_fw,
+        h, *_ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cells_fw=cells_fw,
                                                                   cells_bw=cells_bw,
                                                                   inputs=h,
                                                                   initial_states_fw=initial_states_fw,
@@ -432,8 +432,8 @@ def get_input_placeholders(batch_size, image_size, scope):
     with tf.variable_scope(scope):
         images_placeholder = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, 3), name='images')
         text_placeholder = tf.placeholder(shape=(batch_size, None), name='text', dtype=tf.int32)
-        text_length_placeholder = tf.placeholder(shape=(batch_size, None), name='text_len', dtype=tf.int32)
-        labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size), name='class_labels')
+        text_length_placeholder = tf.placeholder(shape=(batch_size,), name='text_len', dtype=tf.int32)
+        labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size,), name='class_labels')
         return images_placeholder, text_placeholder, text_length_placeholder, labels_placeholder
 
 
