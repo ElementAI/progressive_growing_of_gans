@@ -122,7 +122,7 @@ def get_arguments():
     parser.add_argument('--activation', type=str, default='relu', choices=['relu', 'selu', 'swish-1'])
     # Text feature extractor
     parser.add_argument('--word_embed_dim', type=int, default=128)
-    parser.add_argument('--vocab_size', type=int, default=20000)
+    parser.add_argument('--vocab_size', type=int, default=10000)
     parser.add_argument('--text_feature_extractor', type=str, default='simple_bi_lstm', choices=['simple_bi_lstm'])
 
     parser.add_argument('--embedding_size', type=int, default=None)
@@ -564,15 +564,14 @@ def test():
     return None
 
 
-def build_tokenizer():
+def build_tokenizer(flags):
 
     from keras.preprocessing.text import Tokenizer
-    nb_words = 10000
     if os.path.exists('/mnt/scratch/boris/ssense/tokenizer_embedding.pkl'):
         with open('/mnt/scratch/boris/ssense/tokenizer_embedding.pkl', 'rb') as input_file:
             tokenizer = pickle.load(input_file)
     else:
-        tokenizer = Tokenizer(num_words=nb_words, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n')
+        tokenizer = Tokenizer(num_words=flags.vocab_size, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n')
 
         f = h5py.File('/mnt/scratch/ssense/latest_indexes/unlocked_indexes/ssense_256_256_train.h5', mode='r')
         descriptions = np.char.decode(f['input_description'][:, 0], 'latin')
@@ -606,21 +605,22 @@ class SsenseDataset(object):
 
         glob_pattern = os.path.join(data_path, '*.png')
         self.image_filenames = sorted(glob.glob(glob_pattern))
-        self.im_len = len(self.image_filenames)
+        self.n_samples = len(self.image_filenames)
         self.maxlen = maxlen
 
         with open(self.tokenizer_path, 'rb') as f:
             self.tokenizer = pickle.load(f)
 
-    def next_batch(self, batch_size=64):
-        idxs = np.random.randint(self.im_len, size=batch_size)
-        img_names = [self.image_filenames[i] for i in idxs]
-
+    def get_images(self, img_names):
         images = []
+        for img_name in img_names:
+            images.append(np.asarray(PIL.Image.open(img_name)))
+        return np.asarray(images)
+
+    def get_text(self, img_names):
         texts = []
         text_length = []
         for img_name in img_names:
-            images.append(np.asarray(PIL.Image.open(img_name)))
             json_content = get_json_from_ssense_img_name(self.data_path, img_name)
             # TODO: Remove b' at the beginnning and ' at the end, this is dirty solution
             text_current = json_content['description'][2:-1]
@@ -628,7 +628,31 @@ class SsenseDataset(object):
             text_length.append(len(text_tokens))
             texts.append(text_tokens)
         texts = pad_sequences(texts, maxlen=self.maxlen, padding='post')
-        return np.asarray(images), texts, np.asarray(text_length, dtype=np.int32)
+        return texts, np.asarray(text_length, dtype=np.int32)
+
+    def next_batch(self, batch_size=64):
+        idxs = np.random.randint(self.n_samples, size=batch_size)
+        img_names = [self.image_filenames[i] for i in idxs]
+
+        images = self.get_images(img_names)
+        texts, text_length = self.get_text(img_names)
+        return images, texts, text_length
+
+    def sequential_batches(self, batch_size, n_batches, rng=np.random):
+        """Generator for a random sequence of minibatches with no overlap."""
+        permutation = rng.permutation(self.n_samples)
+        for batch_idx in range(n_batches):
+            start = batch_idx * batch_size
+            end = np.minimum((start + batch_size), self.n_samples)
+            idxs = permutation[start:end]
+            img_names = [self.image_filenames[i] for i in idxs]
+
+            images = self.get_images(img_names)
+            texts, text_length = self.get_text(img_names)
+
+            yield images, texts, text_length
+            if end == self.n_samples:
+                break
 
 
 def main(argv=None):
