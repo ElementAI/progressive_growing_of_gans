@@ -536,7 +536,9 @@ def train(flags):
 
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
+                dt_batch = time.time()
                 images, text, text_length = data_train.next_batch(batch_size=flags.train_batch_size)
+                dt_batch = time.time() - dt_batch
                 # if flags.augment:
                 #     images = image_augment(images)
                 feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length}
@@ -549,10 +551,10 @@ def train(flags):
                     summary_str = sess.run(summary, feed_dict=feed_dict)
                     summary_writer.add_summary(summary_str, step)
                     summary_writer.flush()
-                    logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train))
+                    logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train, dt_batch))
 
-                # if step % flags.eval_interval_steps == 0:
-                #     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
+                if step % flags.eval_interval_steps == 0:
+                    saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
                 #     eval_pretrain(flags, data_set_train=data_train, data_set_test=data_test)
 
     return None
