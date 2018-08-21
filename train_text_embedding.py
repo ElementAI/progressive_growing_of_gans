@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO)
 
 # --data_dir=/home/boris/Downloads/cifar-100-python
 # --data_dir=../../../data/mini-imagenet
-DATA_DIR = os.path.join(os.environ['DATA_PATH'], 'mini-imagenet')
+# DATA_DIR = os.path.join(os.environ['DATA_PATH'], 'mini-imagenet')
 
 
 def get_arguments():
@@ -147,7 +147,7 @@ def get_image_size(data_dir : str):
     :return: image size
     """
 
-    return 128
+    return 256
 
 
 class Namespace(object):
@@ -352,10 +352,11 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
     return h
 
 
-def get_text_feature_extractor(text, flags, is_training=False, scope='text_feature_extractor', reuse=None):
+def get_text_feature_extractor(text, text_length, flags, is_training=False, scope='text_feature_extractor', reuse=None):
     """
         Text extractor selector
-    :param images: tensor of input images in the format BHWC
+    :param text: tensor of input texts tokenized as integers in the format BL
+    :param text_length: tensor of sequence lengths
     :param flags: overall architecture settings
     :param is_training:
     :param scope:
@@ -363,7 +364,7 @@ def get_text_feature_extractor(text, flags, is_training=False, scope='text_featu
     :return:
     """
     if flags.text_feature_extractor == 'simple_bi_lstm':
-        h = get_simple_bi_lstm(text, flags=flags, is_training=is_training, reuse=reuse, scope=scope)
+        h = get_simple_bi_lstm(text, text_length, flags=flags, is_training=is_training, reuse=reuse, scope=scope)
     return h
 
 
@@ -396,7 +397,7 @@ def get_distance_head(embedding_mod1, embedding_mod2, flags, is_training, scope=
         return euclidian
 
 
-def get_inference_graph(images, text, labels, flags, is_training):
+def get_inference_graph(images, text, text_length, flags, is_training):
     """
         Creates text embedding, image embedding and links them using a distance metric.
         Ouputs logits that can be used for training and inference, as well as text and image embeddings.
@@ -411,7 +412,7 @@ def get_inference_graph(images, text, labels, flags, is_training):
     with tf.variable_scope('Model'):
         image_embeddings = get_image_feature_extractor(images, flags, is_training=is_training,
                                                        scope='image_feature_extractor', reuse=False)
-        text_embeddings = get_text_feature_extractor(text, flags, is_training=is_training,
+        text_embeddings = get_text_feature_extractor(text, text_length, flags, is_training=is_training,
                                                      scope='text_feature_extractor', reuse=False)
         # Here we compute logits of correctly matching text to a given image.
         # We could also compute logits of correctly matching an image to a given text by reversing
@@ -430,8 +431,9 @@ def get_input_placeholders(batch_size, image_size, scope):
     with tf.variable_scope(scope):
         images_placeholder = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, 3), name='images')
         text_placeholder = tf.placeholder(tf.float32, shape=(batch_size, None), name='text')
+        text_length_placeholder = tf.placeholder(tf.float32, shape=(batch_size, None), name='text_len', dtype=tf.int32)
         labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size), name='class_labels')
-        return images_placeholder, text_placeholder, labels_placeholder
+        return images_placeholder, text_placeholder, text_length_placeholder, labels_placeholder
 
 
 def get_lr(global_step=None, flags=None):
@@ -479,7 +481,9 @@ def get_main_train_op(loss, global_step, flags):
 
 
 def get_train_datasets(flags):
-    return None
+    data_train = SsenseDataset()
+    data_test = SsenseDataset()
+    return data_train, data_test
 
 
 def train(flags):
@@ -495,11 +499,11 @@ def train(flags):
     data_train, data_test = get_train_datasets(flags)
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
-        images_pl, text_pl, labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
+        images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
                                                       image_size=image_size, scope='inputs')
 
         misassociation_labels = tf.eye(flags.train_batch_size, dtype=tf.float32)
-        logits, *_ = get_inference_graph(images=images_pl, text=text_pl, labels=labels_pl, flags=flags, is_training=True)
+        logits, *_ = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=True)
         loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                     labels=misassociation_labels))
@@ -531,10 +535,10 @@ def train(flags):
 
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
-                images, text, labels = data_train.next_few_shot_batch(batch_size=flags.train_batch_size)
+                images, text, text_length = data_train.next_batch(batch_size=flags.train_batch_size)
                 # if flags.augment:
                 #     images = image_augment(images)
-                feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, labels_pl: labels}
+                feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length}
 
                 t_train = time.time()
                 loss = sess.run(main_train_op, feed_dict=feed_dict)
