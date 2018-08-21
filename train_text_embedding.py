@@ -5,7 +5,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import PIL
 import os
+import pickle
+import h5py
+import glob
 import numpy as np
 import argparse
 import tensorflow as tf
@@ -13,8 +17,6 @@ import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.framework import dtypes
-from scipy.spatial import KDTree
-from common.util import Dataset
 from common.util import ACTIVATION_MAP
 from tqdm import trange
 import pathlib
@@ -22,6 +24,9 @@ import logging
 from common.util import summary_writer
 from common.gen_experiments import load_and_save_params
 import time
+from tqdm import tqdm
+from keras.preprocessing.sequence import pad_sequences
+from dataset_tool import get_json_from_ssense_img_name
 
 '''
 Execute as a script:
@@ -553,8 +558,6 @@ def test():
 
 
 def build_tokenizer():
-    import pickle
-    import h5py
 
     from keras.preprocessing.text import Tokenizer
     nb_words = 10000
@@ -568,11 +571,57 @@ def build_tokenizer():
         descriptions = np.char.decode(f['input_description'][:, 0], 'latin')
         tokenizer.fit_on_texts(list(descriptions))
         f.close()
-        import pickle
         with open('/mnt/scratch/boris/ssense/tokenizer_embedding.pkl', 'wb') as output_file:
             pickle.dump(tokenizer, output_file)
 
-    return None
+
+def create_png_dump_resized(ssense_dir, ssense_dir_resized, resolution=256):
+    glob_pattern = os.path.join(ssense_dir, '*.png')
+    image_filenames = sorted(glob.glob(glob_pattern))
+    pathlib.Path(ssense_dir_resized).mkdir(parents=True, exist_ok=True)
+    for img_name in tqdm(image_filenames):
+        img = PIL.Image.open(os.path.join(img_name))
+        img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
+        _, tail = os.path.split(img_name)
+        img_name_out = os.path.join(ssense_dir_resized, tail)
+        img.save(img_name_out)
+        img.close()
+
+
+class SsenseDataset(object):
+    """ Basic image and text dataset generating batches from a collection of files in a folder """
+
+    def __init__(self, data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
+                 tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
+                 maxlen=100):
+        self.data_path = data_path
+        self.tokenizer_path = tokenizer_path
+
+        glob_pattern = os.path.join(data_path, '*.png')
+        self.image_filenames = sorted(glob.glob(glob_pattern))
+        self.im_len = len(self.image_filenames)
+        self.maxlen = maxlen
+
+        with open(self.tokenizer_path, 'rb') as f:
+            self.tokenizer = pickle.load(f)
+
+    def next_batch(self, batch_size=64):
+        idxs = np.random.randint(self.im_len, size=batch_size)
+        img_names = [self.image_filenames[i] for i in idxs]
+
+        images = []
+        texts = []
+        text_length = []
+        for img_name in img_names:
+            images.append(np.asarray(PIL.Image.open(img_name)))
+            json_content = get_json_from_ssense_img_name(self.data_path, img_name)
+            # TODO: Remove b' at the beginnning and ' at the end, this is dirty solution
+            text_current = json_content['description'][2:-1]
+            text_tokens = self.tokenizer.texts_to_sequences([text_current])[0]
+            text_length.append(len(text_tokens))
+            texts.append(text_tokens)
+        texts = pad_sequences(texts, maxlen=self.maxlen, padding='post')
+        return np.asarray(images), texts, np.asarray(text_length, dtype=np.int32)
 
 
 def main(argv=None):
