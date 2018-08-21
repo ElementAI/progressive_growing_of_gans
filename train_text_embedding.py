@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO)
 
 # --data_dir=/home/boris/Downloads/cifar-100-python
 # --data_dir=../../../data/mini-imagenet
-# DATA_DIR = os.path.join(os.environ['DATA_PATH'], 'mini-imagenet')
+DATA_DIR = "/mnt/scratch/ssense/data_dumps/images_png_dump_256"
 
 
 def get_arguments():
@@ -123,8 +123,10 @@ def get_arguments():
     # Text feature extractor
     parser.add_argument('--word_embed_dim', type=int, default=128)
     parser.add_argument('--vocab_size', type=int, default=20000)
+    parser.add_argument('--text_feature_extractor', type=str, default='simple_bi_lstm', choices=['simple_bi_lstm'])
 
     parser.add_argument('--embedding_size', type=int, default=None)
+    parser.add_argument('--embedding_pooled', type=bool, default=True)
 
     parser.add_argument('--metric_multiplier_init', type=float, default=10.0, help='multiplier of cosine metric')
     parser.add_argument('--metric_multiplier_trainable', type=bool, default=False,
@@ -273,8 +275,6 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
                 for j in range(flags.num_units_in_block):
                     h = slim.conv2d(h, num_outputs=num_filters[i], kernel_size=3, stride=1,
                                     scope='conv' + str(i) + '_' + str(j), padding='SAME', activation_fn=None)
-                    if flags.conv_dropout:
-                        h = slim.dropout(h, keep_prob=1.0 - flags.conv_dropout)
 
                     if j < (flags.num_units_in_block - 1):
                         h = activation_fn(h, name='activation_' + str(i) + '_' + str(j))
@@ -338,6 +338,7 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
 
         cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [flags.embedding_size]]
         cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [flags.embedding_size]]
+        print(text.get_shape())
         initial_states_fw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_fw]
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
@@ -430,8 +431,8 @@ def get_input_placeholders(batch_size, image_size, scope):
     """
     with tf.variable_scope(scope):
         images_placeholder = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, 3), name='images')
-        text_placeholder = tf.placeholder(tf.float32, shape=(batch_size, None), name='text')
-        text_length_placeholder = tf.placeholder(tf.float32, shape=(batch_size, None), name='text_len', dtype=tf.int32)
+        text_placeholder = tf.placeholder(shape=(batch_size, None), name='text', dtype=tf.int32)
+        text_length_placeholder = tf.placeholder(shape=(batch_size, None), name='text_len', dtype=tf.int32)
         labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size), name='class_labels')
         return images_placeholder, text_placeholder, text_length_placeholder, labels_placeholder
 
