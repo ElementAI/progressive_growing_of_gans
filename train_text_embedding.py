@@ -27,6 +27,12 @@ import time
 from tqdm import tqdm
 from keras.preprocessing.sequence import pad_sequences
 from dataset_tool import get_json_from_ssense_img_name
+from tensorflow.contrib.slim.nets import inception
+
+# TODO: use tf.sequence_mask to compute a better average of the sequence
+# TODO: add model loader and performance estimation code
+# TODO: add pretrained imagenet based image feature extractor
+# TODO: connect to borgy
 
 '''
 Execute as a script:
@@ -571,7 +577,7 @@ def build_tokenizer(flags):
         with open('/mnt/scratch/boris/ssense/tokenizer_embedding.pkl', 'rb') as input_file:
             tokenizer = pickle.load(input_file)
     else:
-        tokenizer = Tokenizer(num_words=flags.vocab_size, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n')
+        tokenizer = Tokenizer(num_words=flags.vocab_size, filters='\'!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n')
 
         f = h5py.File('/mnt/scratch/ssense/latest_indexes/unlocked_indexes/ssense_256_256_train.h5', mode='r')
         descriptions = np.char.decode(f['input_description'][:, 0], 'latin')
