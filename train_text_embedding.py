@@ -24,13 +24,14 @@ import logging
 from common.util import summary_writer
 from common.gen_experiments import load_and_save_params
 import time
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from keras.preprocessing.sequence import pad_sequences
 from dataset_tool import get_json_from_ssense_img_name
 from tensorflow.contrib.slim.nets import inception
 
 # TODO: add pretrained imagenet based image feature extractor
 # TODO: connect to borgy
+# TODO: add train/test split and evaluation on test
 
 '''
 Execute as a script:
@@ -78,7 +79,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.0011, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.0011115, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -100,9 +101,8 @@ def get_arguments():
                         help='Number of train steps between evaluating model in the training loop')
     parser.add_argument('--eval_interval_fine_steps', type=int, default=250,
                         help='Number of train steps between evaluating model in the training loop in the final phase')
-    parser.add_argument('--num_samples_eval', type=int, default=12000, help='Number of evaluation samples?')
+    parser.add_argument('--num_samples_eval', type=int, default=100, help='Number of evaluation samples?')
     parser.add_argument('--eval_batch_size', type=int, default=100, help='Evaluation batch size?')
-    parser.add_argument('--num_evals', type=int, default=100, help='Number of evaluations in the evaluation phase')
     # Test parameters
     parser.add_argument('--num_classes_test', type=int, default=5, help='Number of classes in the test phase')
     parser.add_argument('--num_shots_test', type=int, default=5,
@@ -139,8 +139,6 @@ def get_arguments():
 
 
     args = parser.parse_args()
-    if args.num_evals == 0:
-        args.num_evals = args.num_samples_eval / args.eval_batch_size
 
     print(args)
     return args
@@ -530,18 +528,17 @@ class ModelLoader:
             self.logits_size = self.logits.get_shape().as_list()[-1]
             self.step = step
 
-    def eval(self, data_set=None):
+    def eval(self, data_set=None, num_samples=100):
         """
         Runs evaluation loop over dataset
         :param data_set:
         :return:
         """
-        num_batches = data_set.n_samples // self.batch_size
         num_correct = 0.0
         num_tot = 0.0
-
-        for images, texts, text_len in data_set.sequential_batches(batch_size=self.batch_size, n_batches=num_batches):
-
+#         for images, texts, text_len in data_set.sequential_batches(batch_size=self.batch_size, n_batches=num_batches):
+        for i in trange(num_samples):
+            images, texts, text_len = data_set.next_batch(batch_size=self.batch_size)
             feed_dict = {self.images_pl: images.astype(dtype=np.float32),
                          self.text_pl: texts,
                          self.text_len_pl: text_len}
@@ -562,12 +559,12 @@ def eval_once(flags, data_set_train, data_set_test=None):
     results = {}
     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
 
-    acc_tst = None
+    acc_tst = 0.0
     if data_set_test:
-        acc_tst = model.eval(data_set=data_set_test)
+        acc_tst = model.eval(data_set=data_set_test, num_samples=flags.num_samples_eval)
         results["evaluation/accuracy_test"] = acc_tst
 
-    acc_trn = model.eval(data_set=data_set_train)
+    acc_trn = model.eval(data_set=data_set_train, num_samples=flags.num_samples_eval)
     results["evaluation/accuracy_train"] = acc_trn
 
     eval_writer(model.step, **results)
