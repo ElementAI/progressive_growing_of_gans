@@ -29,8 +29,6 @@ from keras.preprocessing.sequence import pad_sequences
 from dataset_tool import get_json_from_ssense_img_name
 from tensorflow.contrib.slim.nets import inception
 
-# TODO: use tf.sequence_mask to compute a better average of the sequence
-# TODO: add model loader and performance estimation code
 # TODO: add pretrained imagenet based image feature extractor
 # TODO: connect to borgy
 
@@ -494,6 +492,88 @@ def get_train_datasets(flags):
     return data_train, data_test
 
 
+class ModelLoader:
+    def __init__(self, model_path, batch_size):
+        self.batch_size = batch_size
+
+        latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir=os.path.join(model_path, 'train'))
+        step = int(os.path.basename(latest_checkpoint).split('-')[1])
+
+        flags = Namespace(load_and_save_params(default_params=dict(), exp_dir=model_path))
+        image_size = get_image_size(flags.data_dir)
+
+        with tf.Graph().as_default():
+            images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=batch_size,
+                                                                                image_size=image_size, scope='inputs')
+            logits, *_ = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags,
+                                             is_training=False)
+            self.images_pl = images_pl
+            self.text_pl = text_pl
+            self.text_len_pl = text_len_pl
+            self.labels_pl = labels_pl
+
+            init_fn = slim.assign_from_checkpoint_fn(
+                latest_checkpoint,
+                slim.get_model_variables('Model'))
+
+            config = tf.ConfigProto(allow_soft_placement=True)
+            config.gpu_options.allow_growth = True
+            self.sess = tf.Session(config=config)
+
+            # Run init before loading the weights
+            self.sess.run(tf.global_variables_initializer())
+            # Load weights
+            init_fn(self.sess)
+
+            self.flags = flags
+            self.logits = logits
+            self.logits_size = self.logits.get_shape().as_list()[-1]
+            self.step = step
+
+    def eval(self, data_set=None):
+        """
+        Runs evaluation loop over dataset
+        :param data_set:
+        :return:
+        """
+        num_batches = data_set.n_samples // self.batch_size
+        num_correct = 0.0
+        num_tot = 0.0
+
+        for images, texts, text_len in data_set.sequential_batches(batch_size=self.batch_size, n_batches=num_batches):
+
+            feed_dict = {self.images_pl: images.astype(dtype=np.float32),
+                         self.text_pl: texts,
+                         self.text_len_pl: text_len}
+            logits = self.sess.run(self.logits, feed_dict)
+            labels_pred = np.argmax(logits, axis=-1)
+
+            num_matches = sum(labels_pred == np.arange(self.batch_size))
+            num_correct += num_matches
+            num_tot += len(labels_pred)
+
+        return num_correct / num_tot
+
+
+def eval_once(flags, data_set_train, data_set_test=None):
+    log_dir = get_logdir_name(flags)
+    eval_writer = summary_writer(log_dir + '/eval')
+
+    results = {}
+    model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
+
+    acc_tst = None
+    if data_set_test:
+        acc_tst = model.eval(data_set=data_set_test)
+        results["evaluation/accuracy_test"] = acc_tst
+
+    acc_trn = model.eval(data_set=data_set_train)
+    results["evaluation/accuracy_train"] = acc_trn
+
+    eval_writer(model.step, **results)
+    logging.info("accuracy_%s: %.3g, accuracy_%s: %.3g." % ("test", acc_tst, "train", acc_trn))
+
+
 def train(flags):
     log_dir = get_logdir_name(flags)
     flags.pretrained_model_dir = log_dir
@@ -562,7 +642,7 @@ def train(flags):
 
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
-                #     eval_pretrain(flags, data_set_train=data_train, data_set_test=data_test)
+                    eval_once(flags, data_set_train=data_train, data_set_test=None)
 
     return None
 
