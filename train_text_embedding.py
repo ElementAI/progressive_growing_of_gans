@@ -61,7 +61,7 @@ def get_arguments():
 
     # Training parameters
     parser.add_argument('--repeat', type=int, default=0)
-    parser.add_argument('--number_of_steps', type=int, default=int(30000),
+    parser.add_argument('--number_of_steps', type=int, default=int(100000),
                         help="Number of training steps (number of Epochs in Hugo's paper)")
     parser.add_argument('--number_of_steps_to_early_stop', type=int, default=int(1000000),
                         help="Number of training steps after half way to early stop the training")
@@ -74,15 +74,15 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.1, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.001, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
-    parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'])
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
     parser.add_argument('--augment', type=bool, default=False)
     # Learning rate paramteres
     parser.add_argument('--lr_anneal', type=str, default='exp', choices=['exp'])
     parser.add_argument('--n_lr_decay', type=int, default=3)
-    parser.add_argument('--lr_decay_rate', type=float, default=10.0)
+    parser.add_argument('--lr_decay_rate', type=float, default=2.0)
     parser.add_argument('--num_steps_decay_pwc', type=int, default=2500,
                         help='Decay learning rate every num_steps_decay_pwc')
 
@@ -511,7 +511,7 @@ def train(flags):
 
         regu_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         loss = tf.add_n([loss] + regu_losses)
-        misclass = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), tf.cast(misassociation_labels, tf.int64))
+        misclass = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), tf.argmax(misassociation_labels, 1))
         main_train_op = get_main_train_op(loss, global_step, flags)
 
         tf.summary.scalar('loss', loss)
