@@ -349,13 +349,14 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
         h, *_ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cells_fw=cells_fw,
-                                                                  cells_bw=cells_bw,
-                                                                  inputs=h,
-                                                                  initial_states_fw=initial_states_fw,
-                                                                  initial_states_bw=initial_states_bw,
-                                                                  dtype=tf.float32,
-                                                                  sequence_length=text_length)
-        h = tf.reduce_mean(h, axis=[1])
+                                                               cells_bw=cells_bw,
+                                                               inputs=h,
+                                                               initial_states_fw=initial_states_fw,
+                                                               initial_states_bw=initial_states_bw,
+                                                               dtype=tf.float32,
+                                                               sequence_length=text_length)
+        mask = tf.expand_dims(tf.sequence_mask(text_length, maxlen=tf.shape(text)[1], dtype=tf.float32), axis=-1)
+        h = tf.reduce_sum(h * mask, axis=[1]) / tf.reduce_sum(mask, axis=[1])
     return h
 
 
