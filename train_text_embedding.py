@@ -80,7 +80,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.001, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.0011, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -356,7 +356,7 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
                                                                dtype=tf.float32,
                                                                sequence_length=text_length)
         mask = tf.expand_dims(tf.sequence_mask(text_length, maxlen=tf.shape(text)[1], dtype=tf.float32), axis=-1)
-        h = tf.reduce_sum(h * mask, axis=[1]) / tf.reduce_sum(mask, axis=[1])
+        h = tf.reduce_sum(tf.multiply(h, mask), axis=[1]) / tf.reduce_sum(mask, axis=[1])
     return h
 
 
