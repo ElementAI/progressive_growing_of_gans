@@ -79,7 +79,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.0011115, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.0011116, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -102,7 +102,7 @@ def get_arguments():
     parser.add_argument('--eval_interval_fine_steps', type=int, default=250,
                         help='Number of train steps between evaluating model in the training loop in the final phase')
     parser.add_argument('--num_samples_eval', type=int, default=100, help='Number of evaluation samples?')
-    parser.add_argument('--eval_batch_size', type=int, default=100, help='Evaluation batch size?')
+    parser.add_argument('--eval_batch_size', type=int, default=32, help='Evaluation batch size?')
     # Test parameters
     parser.add_argument('--num_classes_test', type=int, default=5, help='Number of classes in the test phase')
     parser.add_argument('--num_shots_test', type=int, default=5,
@@ -271,7 +271,7 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
             for i in range(len(num_filters)):
                 # make shortcut
                 shortcut = slim.conv2d(h, num_outputs=num_filters[i], kernel_size=1, stride=1,
-                                       activation_fn=None,
+                                       activation_fn=None, 
                                        scope='shortcut' + str(i), padding='SAME')
 
                 for j in range(flags.num_units_in_block):
@@ -340,7 +340,6 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
 
         cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
         cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
-        print(text.get_shape())
         initial_states_fw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_fw]
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
@@ -491,7 +490,7 @@ def get_train_datasets(flags):
 
 
 class ModelLoader:
-    def __init__(self, model_path, batch_size):
+    def __init__(self, model_path, batch_size):        
         self.batch_size = batch_size
 
         latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir=os.path.join(model_path, 'train'))
@@ -503,21 +502,23 @@ class ModelLoader:
         with tf.Graph().as_default():
             images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=batch_size,
                                                                                 image_size=image_size, scope='inputs')
-            logits, *_ = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags,
+            logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags,
                                              is_training=False)
             self.images_pl = images_pl
             self.text_pl = text_pl
             self.text_len_pl = text_len_pl
             self.labels_pl = labels_pl
+            self.image_embeddings = image_embeddings
+            self.text_embeddings = text_embeddings
 
             init_fn = slim.assign_from_checkpoint_fn(
                 latest_checkpoint,
-                slim.get_model_variables('Model'))
+                tf.global_variables())
 
             config = tf.ConfigProto(allow_soft_placement=True)
             config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=config)
-
+            
             # Run init before loading the weights
             self.sess.run(tf.global_variables_initializer())
             # Load weights
@@ -527,6 +528,12 @@ class ModelLoader:
             self.logits = logits
             self.logits_size = self.logits.get_shape().as_list()[-1]
             self.step = step
+            
+    def predict(self, images, texts, text_len):
+        feed_dict = {self.images_pl: images.astype(dtype=np.float32),
+                     self.text_pl: texts,
+                     self.text_len_pl: text_len}
+        return self.sess.run([self.logits, self.image_embeddings, self.text_embeddings], feed_dict)
 
     def eval(self, data_set=None, num_samples=100):
         """
@@ -545,7 +552,8 @@ class ModelLoader:
             logits = self.sess.run(self.logits, feed_dict)
             labels_pred = np.argmax(logits, axis=-1)
 
-            num_matches = sum(labels_pred == np.arange(self.batch_size))
+            labels = np.arange(self.batch_size)
+            num_matches = sum(labels_pred == labels)
             num_correct += num_matches
             num_tot += len(labels_pred)
 
@@ -588,7 +596,7 @@ def train(flags):
                                                       image_size=image_size, scope='inputs')
 
         misassociation_labels = tf.eye(flags.train_batch_size, dtype=tf.float32)
-        logits, *_ = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=True)
+        logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=True)
         loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                     labels=misassociation_labels))
@@ -617,7 +625,8 @@ def train(flags):
             checkpoint_step = sess.run(global_step)
             if checkpoint_step > 0:
                 checkpoint_step += 1
-
+            
+            loss, dt_train = 0.0, 0.0
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
                 dt_batch = time.time()
@@ -626,20 +635,31 @@ def train(flags):
                 # if flags.augment:
                 #     images = image_augment(images)
                 feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length}
-
-                t_train = time.time()
-                loss = sess.run(main_train_op, feed_dict=feed_dict)
-                dt_train = time.time() - t_train
-
+                
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
                     summary_writer.add_summary(summary_str, step)
                     summary_writer.flush()
                     logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train, dt_batch))
-
+                
+                t_train = time.time()
+                loss = sess.run(main_train_op, feed_dict=feed_dict)
+                dt_train = time.time() - t_train
+                
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
+#                     logits_trg, image_embeddings_trg, text_embeddings_trg = sess.run([logits, image_embeddings, text_embeddings], feed_dict=feed_dict)
                     eval_once(flags, data_set_train=data_train, data_set_test=None)
+                    
+#                     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
+#                     logits_saved, image_embeddings_saved, text_embeddings_saved = model.predict(images, text, text_length)
+#                     print("Train graph logits: ", logits_trg)
+#                     print("Train graph images: ", image_embeddings_trg)
+#                     print("Train graph text: ", text_embeddings_trg)
+#                     print("Saved graph logits: ", logits_saved)
+#                     print("Saved graph images: ", image_embeddings_saved)
+#                     print("Saved graph text: ", text_embeddings_saved)
+#                     model=None
 
     return None
 
