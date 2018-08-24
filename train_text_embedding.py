@@ -29,7 +29,6 @@ from keras.preprocessing.sequence import pad_sequences
 from dataset_tool import get_json_from_ssense_img_name
 from tensorflow.contrib.slim.nets import inception
 
-# TODO: add pretrained imagenet based image feature extractor
 # TODO: connect to borgy
 # TODO: add train/test split and evaluation on test
 
@@ -116,8 +115,10 @@ def get_arguments():
     parser.add_argument('--dropout', type=float, default=None)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     # Image feature extractor
-    parser.add_argument('--image_feature_extractor', type=str, default='simple_res_net',
-                        choices=['simple_res_net'], help='Which feature extractor to use')
+    parser.add_argument('--image_feature_extractor', type=str, default='inception_v3',
+                        choices=['simple_res_net', 'inception_v3'], help='Which feature extractor to use')
+    parser.add_argument('--image_fe_trainable', type=bool, default=False)
+    parser.add_argument('--image_fe_checkpoint_file', type=str, default='/Users/boris/Downloads/inception_v3.ckpt')
     parser.add_argument('--num_filters', type=int, default=64)
     parser.add_argument('--num_units_in_block', type=int, default=3)
     parser.add_argument('--num_blocks', type=int, default=4)
@@ -271,7 +272,7 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
             for i in range(len(num_filters)):
                 # make shortcut
                 shortcut = slim.conv2d(h, num_outputs=num_filters[i], kernel_size=1, stride=1,
-                                       activation_fn=None, 
+                                       activation_fn=None,
                                        scope='shortcut' + str(i), padding='SAME')
 
                 for j in range(flags.num_units_in_block):
@@ -302,6 +303,22 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
     return h
 
 
+def get_inception_v3(images, flags, is_training=False, reuse=None, scope=None):
+    arg_scope = inception.inception_v3_arg_scope()
+    with slim.arg_scope(arg_scope):
+        with tf.variable_scope(scope or 'image_feature_extractor', reuse=reuse):
+            images = tf.image.resize_bilinear(images, size=[299, 299], align_corners=False)
+            scaled_input_tensor = tf.scalar_mul((1.0 / 255), images)
+            scaled_input_tensor = tf.subtract(scaled_input_tensor, 0.5)
+            scaled_input_tensor = tf.multiply(scaled_input_tensor, 2.0)
+
+            logits, end_points = inception.inception_v3(scaled_input_tensor, is_training=is_training, num_classes=1001,
+                                                        reuse=reuse)
+            h = end_points['PreLogits']
+            h = slim.flatten(h)
+    return h
+
+
 def get_image_feature_extractor(images, flags, is_training=False, scope='image_feature_extractor', reuse=None):
     """
         Image feature extractor selector
@@ -316,10 +333,12 @@ def get_image_feature_extractor(images, flags, is_training=False, scope='image_f
     num_filters = [round(flags.num_filters * pow(flags.block_size_growth, i)) for i in range(flags.num_blocks)]
     if flags.image_feature_extractor == 'simple_res_net':
         h = get_simple_res_net(images, flags=flags, num_filters=num_filters, is_training=is_training, reuse=reuse, scope=scope)
+    elif flags.image_feature_extractor == 'inception_v3':
+        h = get_inception_v3(images, flags=flags, is_training=is_training, reuse=reuse, scope=scope)
     return h
 
 
-def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_feature_extractor', reuse=None):
+def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training=False, scope='text_feature_extractor', reuse=None):
     """
 
     :param text: input text sequence, BTC
@@ -338,8 +357,8 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
                                              trainable=is_training,
                                              scope='TextEmbedding')
 
-        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
-        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
+        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [embedding_size // 2]]
+        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [embedding_size // 2]]
         initial_states_fw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_fw]
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
@@ -355,19 +374,21 @@ def get_simple_bi_lstm(text, text_length, flags, is_training=False, scope='text_
     return h
 
 
-def get_text_feature_extractor(text, text_length, flags, is_training=False, scope='text_feature_extractor', reuse=None):
+def get_text_feature_extractor(text, text_length, flags, embedding_size=512, is_training=False, scope='text_feature_extractor', reuse=None):
     """
         Text extractor selector
     :param text: tensor of input texts tokenized as integers in the format BL
     :param text_length: tensor of sequence lengths
     :param flags: overall architecture settings
+    :param embedding_size: the length of embedding vector
     :param is_training:
     :param scope:
     :param reuse:
     :return:
     """
     if flags.text_feature_extractor == 'simple_bi_lstm':
-        h = get_simple_bi_lstm(text, text_length, flags=flags, is_training=is_training, reuse=reuse, scope=scope)
+        h = get_simple_bi_lstm(text, text_length, flags=flags, embedding_size=embedding_size, is_training=is_training,
+                               reuse=reuse, scope=scope)
     return h
 
 
@@ -415,8 +436,9 @@ def get_inference_graph(images, text, text_length, flags, is_training):
     with tf.variable_scope('Model'):
         image_embeddings = get_image_feature_extractor(images, flags, is_training=is_training,
                                                        scope='image_feature_extractor', reuse=False)
-        text_embeddings = get_text_feature_extractor(text, text_length, flags, is_training=is_training,
-                                                     scope='text_feature_extractor', reuse=False)
+        text_embedding_size = image_embeddings.get_shape().as_list()[-1]
+        text_embeddings = get_text_feature_extractor(text, text_length, flags, embedding_size=text_embedding_size,
+                                                     is_training=is_training, scope='text_feature_extractor', reuse=False)
         # Here we compute logits of correctly matching text to a given image.
         # We could also compute logits of correctly matching an image to a given text by reversing
         # image_embeddings and text_embeddings
@@ -460,7 +482,7 @@ def get_lr(global_step=None, flags=None):
     return learning_rate
 
 
-def get_main_train_op(loss, global_step, flags):
+def get_main_train_op(loss: tf.Tensor, global_step: tf.Variable, flags: Namespace):
     """
     Creates a train operation to minimize loss
     :param loss: loss to be minimized
@@ -478,9 +500,15 @@ def get_main_train_op(loss, global_step, flags):
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     else:
         raise Exception('Optimizer not implemented')
+    # get variables to train
+    if flags.image_fe_trainable:
+        variables_to_train = tf.trainable_variables()
+    else:
+        variables_to_train = tf.trainable_variables(scope='(?!.*image_feature_extractor).*')
     # Train operation
     return slim.learning.create_train_op(total_loss=loss, optimizer=optimizer, global_step=global_step,
-                                         clip_gradient_norm=flags.clip_gradient_norm)
+                                         clip_gradient_norm=flags.clip_gradient_norm,
+                                         variables_to_train=variables_to_train)
 
 
 def get_train_datasets(flags):
@@ -490,7 +518,7 @@ def get_train_datasets(flags):
 
 
 class ModelLoader:
-    def __init__(self, model_path, batch_size):        
+    def __init__(self, model_path, batch_size):
         self.batch_size = batch_size
 
         latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir=os.path.join(model_path, 'train'))
@@ -518,7 +546,7 @@ class ModelLoader:
             config = tf.ConfigProto(allow_soft_placement=True)
             config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=config)
-            
+
             # Run init before loading the weights
             self.sess.run(tf.global_variables_initializer())
             # Load weights
@@ -528,7 +556,7 @@ class ModelLoader:
             self.logits = logits
             self.logits_size = self.logits.get_shape().as_list()[-1]
             self.step = step
-            
+
     def predict(self, images, texts, text_len):
         feed_dict = {self.images_pl: images.astype(dtype=np.float32),
                      self.text_pl: texts,
@@ -579,6 +607,17 @@ def eval_once(flags, data_set_train, data_set_test=None):
     logging.info("accuracy_%s: %.3g, accuracy_%s: %.3g." % ("test", acc_tst, "train", acc_trn))
 
 
+def get_image_fe_restorer(flags : Namespace):
+    if flags.image_feature_extractor == 'inception_v3':
+        vars = tf.get_collection(key=tf.GraphKeys.MODEL_VARIABLES, scope='.*InceptionV3')
+
+        def name_in_checkpoint(var: tf.Variable):
+            return '/'.join(var.op.name.split('/')[2:])
+
+        return tf.train.Saver(var_list={name_in_checkpoint(var): var for var in vars})
+    else:
+        return None
+
 def train(flags):
     log_dir = get_logdir_name(flags)
     flags.pretrained_model_dir = log_dir
@@ -613,6 +652,7 @@ def train(flags):
         # Define session and logging
         summary_writer = tf.summary.FileWriter(log_dir, flush_secs=1)
         saver = tf.train.Saver(max_to_keep=1, save_relative_paths=True)
+        image_fe_restorer = get_image_fe_restorer(flags=flags)
         supervisor = tf.train.Supervisor(logdir=log_dir, init_feed_dict=None,
                                          summary_op=None,
                                          init_op=tf.global_variables_initializer(),
@@ -622,10 +662,13 @@ def train(flags):
                                          save_model_secs=0)
 
         with supervisor.managed_session() as sess:
+            if image_fe_restorer:
+                image_fe_restorer.restore(sess, flags.image_fe_checkpoint_file)
+
             checkpoint_step = sess.run(global_step)
             if checkpoint_step > 0:
                 checkpoint_step += 1
-            
+
             loss, dt_train = 0.0, 0.0
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
@@ -635,22 +678,22 @@ def train(flags):
                 # if flags.augment:
                 #     images = image_augment(images)
                 feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length}
-                
+
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
                     summary_writer.add_summary(summary_str, step)
                     summary_writer.flush()
                     logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train, dt_batch))
-                
+
                 t_train = time.time()
                 loss = sess.run(main_train_op, feed_dict=feed_dict)
                 dt_train = time.time() - t_train
-                
+
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
 #                     logits_trg, image_embeddings_trg, text_embeddings_trg = sess.run([logits, image_embeddings, text_embeddings], feed_dict=feed_dict)
                     eval_once(flags, data_set_train=data_train, data_set_test=None)
-                    
+
 #                     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
 #                     logits_saved, image_embeddings_saved, text_embeddings_saved = model.predict(images, text, text_length)
 #                     print("Train graph logits: ", logits_trg)
