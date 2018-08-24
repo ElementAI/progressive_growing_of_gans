@@ -357,8 +357,8 @@ def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training
                                              trainable=is_training,
                                              scope='TextEmbedding')
 
-        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [embedding_size // 2]]
-        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [embedding_size // 2]]
+        cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
+        cells_bw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
         initial_states_fw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_fw]
         initial_states_bw = [cell.zero_state(text.get_shape()[0], dtype=tf.float32) for cell in cells_bw]
 
@@ -371,6 +371,8 @@ def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training
                                                                sequence_length=text_length)
         mask = tf.expand_dims(tf.sequence_mask(text_length, maxlen=tf.shape(text)[1], dtype=tf.float32), axis=-1)
         h = tf.reduce_sum(tf.multiply(h, mask), axis=[1]) / tf.reduce_sum(mask, axis=[1])
+        # this is the adaptor to match the size of the image extractor
+        h = tf.contrib.layers.fully_connected(h, num_outputs=embedding_size)
     return h
 
 
