@@ -78,7 +78,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.0011116, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.00111161, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -118,7 +118,7 @@ def get_arguments():
     parser.add_argument('--image_feature_extractor', type=str, default='inception_v3',
                         choices=['simple_res_net', 'inception_v3'], help='Which feature extractor to use')
     parser.add_argument('--image_fe_trainable', type=bool, default=False)
-    parser.add_argument('--image_fe_checkpoint_file', type=str, default='/Users/boris/Downloads/inception_v3.ckpt')
+    parser.add_argument('--image_fe_checkpoint_file', type=str, default='/mnt/scratch/ssense/data_dumps/pretrained_models/inception_v3.ckpt') # '/Users/boris/Downloads/inception_v3.ckpt'
     parser.add_argument('--num_filters', type=int, default=64)
     parser.add_argument('--num_units_in_block', type=int, default=3)
     parser.add_argument('--num_blocks', type=int, default=4)
@@ -305,6 +305,7 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
 
 def get_inception_v3(images, flags, is_training=False, reuse=None, scope=None):
     arg_scope = inception.inception_v3_arg_scope()
+    training_flag = is_training and flags.image_fe_trainable
     with slim.arg_scope(arg_scope):
         with tf.variable_scope(scope or 'image_feature_extractor', reuse=reuse):
             images = tf.image.resize_bilinear(images, size=[299, 299], align_corners=False)
@@ -312,7 +313,7 @@ def get_inception_v3(images, flags, is_training=False, reuse=None, scope=None):
             scaled_input_tensor = tf.subtract(scaled_input_tensor, 0.5)
             scaled_input_tensor = tf.multiply(scaled_input_tensor, 2.0)
 
-            logits, end_points = inception.inception_v3(scaled_input_tensor, is_training=is_training, num_classes=1001,
+            logits, end_points = inception.inception_v3(scaled_input_tensor, is_training=training_flag, num_classes=1001,
                                                         reuse=reuse)
             h = end_points['PreLogits']
             h = slim.flatten(h)
@@ -620,6 +621,24 @@ def get_image_fe_restorer(flags : Namespace):
     else:
         return None
 
+
+def test_pretrained_inception_model(images_pl, sess):
+    # code to test loaded inception model
+    sample_images = ['dog.jpg', 'panda.jpg', 'tinca_tinca.jpg']
+    from PIL import Image
+    graph = tf.get_default_graph()
+    inception_logits_pl = graph.get_tensor_by_name("Model/image_feature_extractor/InceptionV3/Predictions/Reshape_1:0")
+    for image in sample_images:
+        im = Image.open(image).resize((256,256))
+        im = np.array(im)
+        im = im.reshape(-1,256,256,3).astype(np.float32)
+        im = np.tile(im, [images_pl.get_shape().as_list()[0], 1, 1, 1])
+        logit_values = sess.run(inception_logits_pl, feed_dict={images_pl: im})
+        print(image)
+        print (np.max(logit_values, axis=-1))
+        print (np.argmax(logit_values, axis=-1)-1)
+    
+        
 def train(flags):
     log_dir = get_logdir_name(flags)
     flags.pretrained_model_dir = log_dir
@@ -666,7 +685,8 @@ def train(flags):
         with supervisor.managed_session() as sess:
             if image_fe_restorer:
                 image_fe_restorer.restore(sess, flags.image_fe_checkpoint_file)
-
+                # test_pretrained_inception_model(images_pl, sess)
+            
             checkpoint_step = sess.run(global_step)
             if checkpoint_step > 0:
                 checkpoint_step += 1
@@ -693,18 +713,7 @@ def train(flags):
 
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
-#                     logits_trg, image_embeddings_trg, text_embeddings_trg = sess.run([logits, image_embeddings, text_embeddings], feed_dict=feed_dict)
                     eval_once(flags, data_set_train=data_train, data_set_test=None)
-
-#                     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
-#                     logits_saved, image_embeddings_saved, text_embeddings_saved = model.predict(images, text, text_length)
-#                     print("Train graph logits: ", logits_trg)
-#                     print("Train graph images: ", image_embeddings_trg)
-#                     print("Train graph text: ", text_embeddings_trg)
-#                     print("Saved graph logits: ", logits_saved)
-#                     print("Saved graph images: ", image_embeddings_saved)
-#                     print("Saved graph text: ", text_embeddings_saved)
-#                     model=None
 
     return None
 
