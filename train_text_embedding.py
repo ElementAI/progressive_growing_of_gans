@@ -739,6 +739,16 @@ def build_tokenizer(flags):
             pickle.dump(tokenizer, output_file)
 
 
+def get_product_id(img_name : str):
+    file_name, ext = os.path.splitext(os.path.basename(img_name))
+    product_id, *_, pose_id = file_name.split('_')
+    return product_id
+
+
+def get_product_list(image_filenames : list):
+    return list(set([get_product_id(img_name) for img_name in image_filenames]))
+
+
 def create_png_dump_resized(ssense_dir, ssense_dir_resized, resolution=256):
     glob_pattern = os.path.join(ssense_dir, '*.png')
     image_filenames = sorted(glob.glob(glob_pattern))
