@@ -28,6 +28,8 @@ from tqdm import tqdm, trange
 from keras.preprocessing.sequence import pad_sequences
 from dataset_tool import get_json_from_ssense_img_name
 from tensorflow.contrib.slim.nets import inception
+from shutil import copy
+from typing import List, Dict
 
 # TODO: connect to borgy
 # TODO: add train/test split and evaluation on test
@@ -514,10 +516,78 @@ def get_main_train_op(loss: tf.Tensor, global_step: tf.Variable, flags: Namespac
                                          variables_to_train=variables_to_train)
 
 
-def get_train_datasets(flags):
-    data_train = SsenseDataset()
-    data_test = SsenseDataset()
-    return data_train, data_test
+class SsenseDataset(object):
+    """ Basic image and text dataset generating batches from a collection of files in a folder """
+
+    def __init__(self, data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
+                 tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
+                 maxlen=100):
+        self.data_path = data_path
+        self.tokenizer_path = tokenizer_path
+
+        glob_pattern = os.path.join(data_path, '*.png')
+        self.image_filenames = sorted(glob.glob(glob_pattern))
+        self.n_samples = len(self.image_filenames)
+        self.maxlen = maxlen
+
+        with open(self.tokenizer_path, 'rb') as f:
+            self.tokenizer = pickle.load(f)
+
+    def get_images(self, img_names):
+        images = []
+        for img_name in img_names:
+            images.append(np.asarray(PIL.Image.open(img_name)))
+        return np.asarray(images)
+
+    def get_text(self, img_names):
+        texts = []
+        text_length = []
+        for img_name in img_names:
+            json_content = get_json_from_ssense_img_name(self.data_path, img_name)
+            # TODO: Remove b' at the beginnning and ' at the end, this is dirty solution
+            text_current = json_content['description'][2:-1]
+            text_tokens = self.tokenizer.texts_to_sequences([text_current])[0]
+            text_length.append(len(text_tokens))
+            texts.append(text_tokens)
+        texts = pad_sequences(texts, maxlen=self.maxlen, padding='post')
+        return texts, np.asarray(text_length, dtype=np.int32)
+
+    def next_batch(self, batch_size=64):
+        idxs = np.random.randint(self.n_samples, size=batch_size)
+        img_names = [self.image_filenames[i] for i in idxs]
+
+        images = self.get_images(img_names)
+        texts, text_length = self.get_text(img_names)
+        return images, texts, text_length
+
+    def sequential_batches(self, batch_size, n_batches, rng=np.random):
+        """Generator for a random sequence of minibatches with no overlap."""
+        permutation = rng.permutation(self.n_samples)
+        for batch_idx in range(n_batches):
+            start = batch_idx * batch_size
+            end = np.minimum((start + batch_size), self.n_samples)
+            idxs = permutation[start:end]
+            img_names = [self.image_filenames[i] for i in idxs]
+
+            images = self.get_images(img_names)
+            texts, text_length = self.get_text(img_names)
+
+            yield images, texts, text_length
+            if end == self.n_samples:
+                break
+
+
+def get_train_datasets(data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
+                       tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
+                       maxlen=100,
+                       splits: List[str]=['train', 'test', 'validation']):
+    
+    assert set(splits).issubset(next(os.walk(data_path))[1]), "One or more splits doesn't exist in %s" %data_path
+    datasets = {}
+    for split_folder in splits:
+        datasets[split_folder] = SsenseDataset(data_path=os.path.join(data_path, split_folder),
+                                              tokenizer_path=tokenizer_path, maxlen=maxlen)
+    return datasets
 
 
 class ModelLoader:
@@ -591,24 +661,19 @@ class ModelLoader:
         return num_correct / num_tot
 
 
-def eval_once(flags, data_set_train, data_set_test=None):
+def eval_once(flags: Namespace, datasets: Dict[str, SsenseDataset]):
+    
+    model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
+    results = {}
+    for data_name, dataset in datasets.items():
+        acc = model.eval(data_set=dataset, num_samples=flags.num_samples_eval)
+        results["evaluation/"+data_name] = acc
+        logging.info("accuracy_%s: %.3g" % (data_name, acc))
+    
     log_dir = get_logdir_name(flags)
     eval_writer = summary_writer(log_dir + '/eval')
-
-    results = {}
-    model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
-
-    acc_tst = 0.0
-    if data_set_test:
-        acc_tst = model.eval(data_set=data_set_test, num_samples=flags.num_samples_eval)
-        results["evaluation/accuracy_test"] = acc_tst
-
-    acc_trn = model.eval(data_set=data_set_train, num_samples=flags.num_samples_eval)
-    results["evaluation/accuracy_train"] = acc_trn
-
     eval_writer(model.step, **results)
-    logging.info("accuracy_%s: %.3g, accuracy_%s: %.3g." % ("test", acc_tst, "train", acc_trn))
-
+    
 
 def get_image_fe_restorer(flags : Namespace):
     if flags.image_feature_extractor == 'inception_v3':
@@ -649,7 +714,7 @@ def train(flags):
     image_size = get_image_size(flags.data_dir)
 
     # Get datasets
-    data_train, data_test = get_train_datasets(flags)
+    datasets = get_train_datasets(flags)
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
         images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
@@ -695,7 +760,7 @@ def train(flags):
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
                 dt_batch = time.time()
-                images, text, text_length = data_train.next_batch(batch_size=flags.train_batch_size)
+                images, text, text_length = datasets['train'].next_batch(batch_size=flags.train_batch_size)
                 dt_batch = time.time() - dt_batch
                 # if flags.augment:
                 #     images = image_augment(images)
@@ -713,7 +778,7 @@ def train(flags):
 
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
-                    eval_once(flags, data_set_train=data_train, data_set_test=None)
+                    eval_once(flags, datasets=datasets)
 
     return None
 
@@ -749,78 +814,95 @@ def get_product_list(image_filenames : list):
     return list(set([get_product_id(img_name) for img_name in image_filenames]))
 
 
-def create_png_dump_resized(ssense_dir, ssense_dir_resized, resolution=256):
+def get_product_to_filename_map(image_filenames : list):
+    prod_to_filename_map = {}
+    for img_name in image_filenames:
+        prod_id = get_product_id(img_name)
+        prod_to_filename_map[prod_id] = prod_to_filename_map.get(prod_id, []) + [img_name]
+    return prod_to_filename_map
+
+
+def get_splits(image_filenames: List[str], test_split: Dict[str, float]) -> Dict[str, List[str]]:
+    
+    if test_split:
+        product_ids = get_product_list(image_filenames)
+        print("Loaded %d product ids..." %(len(product_ids)))
+        
+        print("Create train/test splits in the product id space")
+        split_prod_id_dict = {}
+        split_idxs = {}
+        product_idxs = np.arange(len(product_ids), dtype=np.int64)
+        assert sum(test_split.values()) == 1.0, "Split probabilities do not sum up to 1"
+        for split_name, split_frac in test_split.items():
+            size = int(round(split_frac * len(product_ids)))
+            split_idxs[split_name] = np.random.choice(product_idxs, size=size, replace=False)
+            split_prod_id_dict[split_name] = [product_ids[idx] for idx in split_idxs[split_name]]
+            product_idxs = np.setxor1d(product_idxs, split_idxs[split_name])
+                
+        print("Test if product ID splits contain all product IDs ...")
+        assert set(np.concatenate(list(split_idxs.values()))) == set(np.arange(len(product_ids), dtype=np.int64))
+        print("Test if product ID splits are disjoint...")
+        for split_name1, split_idxs1 in split_idxs.items():
+            for split_name2, split_idxs2 in split_idxs.items():
+                if split_name1 != split_name2:
+                    assert len(set.intersection(set(split_idxs1), set(split_idxs2))) == 0, "Splits overlap"
+        
+        print("Create train/test splits in the image filename space")
+        split_dict = {}
+        prod_to_filename_map = get_product_to_filename_map(image_filenames)
+        for split_name, split_frac in test_split.items():
+            split_product_ids = split_prod_id_dict[split_name]
+            split_filenames = [prod_to_filename_map[prod_id] for prod_id in split_product_ids]
+            # Flatten list of lists
+            split_filenames = [item for sublist in split_filenames for item in sublist]
+            split_dict[split_name] = split_filenames
+        
+        print("Test if filename splits contain all filenames ...")
+        assert set(np.concatenate(list(split_dict.values()))) == set(image_filenames)
+        print("Test if filename splits are disjoint...")
+        for split_name1, split_idxs1 in split_dict.items():
+            for split_name2, split_idxs2 in split_dict.items():
+                if split_name1 != split_name2:
+                    assert len(set.intersection(set(split_idxs1), set(split_idxs2))) == 0, "Splits overlap"
+                    
+        for split_name, split_filenames in split_dict.items():
+            print("Number of files in split '%s': %d" %(split_name, len(split_filenames)))
+    else:
+        split_dict = {'': image_filenames}
+        
+    return split_dict
+
+
+def write_splis_to_disk(split_dict: Dict[str, List[str]], ssense_dir: str, ssense_dir_resized: str, resolution: int=256):
+    input_metadata_dir = os.path.join(ssense_dir, 'images_metadata')
+    for split_name, split_image_filenames in split_dict.items():
+        output_dir = os.path.join(ssense_dir_resized, split_name)
+        output_metadata_dir = os.path.join(output_dir, 'images_metadata')
+        pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(output_metadata_dir).mkdir(parents=True, exist_ok=True)
+        for img_name in tqdm(split_image_filenames):
+            img = PIL.Image.open(os.path.join(img_name))
+            img_size, _ = img.size
+            if resolution != img_size:
+                img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
+            _, tail = os.path.split(img_name)
+            img_name_out = os.path.join(output_dir, tail)
+            img.save(img_name_out)
+            img.close()
+            
+            prod_id = get_product_id(img_name)
+            copy(os.path.join(input_metadata_dir, prod_id+'.json'), output_metadata_dir)
+
+            
+def create_png_dump_resized(ssense_dir, ssense_dir_resized, resolution:int=256, test_split=None):
     glob_pattern = os.path.join(ssense_dir, '*.png')
+    print("Loading data from: ", ssense_dir)
     image_filenames = sorted(glob.glob(glob_pattern))
-    pathlib.Path(ssense_dir_resized).mkdir(parents=True, exist_ok=True)
-    for img_name in tqdm(image_filenames):
-        img = PIL.Image.open(os.path.join(img_name))
-        img = img.resize((resolution, resolution), PIL.Image.ANTIALIAS)
-        _, tail = os.path.split(img_name)
-        img_name_out = os.path.join(ssense_dir_resized, tail)
-        img.save(img_name_out)
-        img.close()
-
-
-class SsenseDataset(object):
-    """ Basic image and text dataset generating batches from a collection of files in a folder """
-
-    def __init__(self, data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
-                 tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
-                 maxlen=100):
-        self.data_path = data_path
-        self.tokenizer_path = tokenizer_path
-
-        glob_pattern = os.path.join(data_path, '*.png')
-        self.image_filenames = sorted(glob.glob(glob_pattern))
-        self.n_samples = len(self.image_filenames)
-        self.maxlen = maxlen
-
-        with open(self.tokenizer_path, 'rb') as f:
-            self.tokenizer = pickle.load(f)
-
-    def get_images(self, img_names):
-        images = []
-        for img_name in img_names:
-            images.append(np.asarray(PIL.Image.open(img_name)))
-        return np.asarray(images)
-
-    def get_text(self, img_names):
-        texts = []
-        text_length = []
-        for img_name in img_names:
-            json_content = get_json_from_ssense_img_name(self.data_path, img_name)
-            # TODO: Remove b' at the beginnning and ' at the end, this is dirty solution
-            text_current = json_content['description'][2:-1]
-            text_tokens = self.tokenizer.texts_to_sequences([text_current])[0]
-            text_length.append(len(text_tokens))
-            texts.append(text_tokens)
-        texts = pad_sequences(texts, maxlen=self.maxlen, padding='post')
-        return texts, np.asarray(text_length, dtype=np.int32)
-
-    def next_batch(self, batch_size=64):
-        idxs = np.random.randint(self.n_samples, size=batch_size)
-        img_names = [self.image_filenames[i] for i in idxs]
-
-        images = self.get_images(img_names)
-        texts, text_length = self.get_text(img_names)
-        return images, texts, text_length
-
-    def sequential_batches(self, batch_size, n_batches, rng=np.random):
-        """Generator for a random sequence of minibatches with no overlap."""
-        permutation = rng.permutation(self.n_samples)
-        for batch_idx in range(n_batches):
-            start = batch_idx * batch_size
-            end = np.minimum((start + batch_size), self.n_samples)
-            idxs = permutation[start:end]
-            img_names = [self.image_filenames[i] for i in idxs]
-
-            images = self.get_images(img_names)
-            texts, text_length = self.get_text(img_names)
-
-            yield images, texts, text_length
-            if end == self.n_samples:
-                break
+    
+    split_dict = get_splits(image_filenames=image_filenames, test_split=test_split)
+    
+    write_splis_to_disk(split_dict=split_dict, ssense_dir=ssense_dir, 
+                        ssense_dir_resized=ssense_dir_resized, resolution=resolution)
 
 
 def main(argv=None):
