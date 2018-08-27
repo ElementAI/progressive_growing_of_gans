@@ -32,7 +32,6 @@ from shutil import copy
 from typing import List, Dict
 
 # TODO: connect to borgy
-# TODO: add train/test split and evaluation on test
 
 '''
 Execute as a script:
@@ -80,7 +79,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.00111161, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.0011, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -714,7 +713,7 @@ def train(flags):
     image_size = get_image_size(flags.data_dir)
 
     # Get datasets
-    datasets = get_train_datasets(flags)
+    datasets = get_train_datasets()
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
         images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
