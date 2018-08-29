@@ -31,6 +31,7 @@ from tensorflow.contrib.slim.nets import inception
 from shutil import copy
 from typing import List, Dict
 
+# TODO: destroy order in batches
 # TODO: connect to borgy
 
 '''
@@ -79,7 +80,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.0011, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.001011, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -116,9 +117,9 @@ def get_arguments():
     parser.add_argument('--dropout', type=float, default=None)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     # Image feature extractor
-    parser.add_argument('--image_feature_extractor', type=str, default='inception_v3',
+    parser.add_argument('--image_feature_extractor', type=str, default='simple_res_net',
                         choices=['simple_res_net', 'inception_v3'], help='Which feature extractor to use')
-    parser.add_argument('--image_fe_trainable', type=bool, default=False)
+    parser.add_argument('--image_fe_trainable', type=bool, default=True)
     parser.add_argument('--image_fe_checkpoint_file', type=str, default='/mnt/scratch/ssense/data_dumps/pretrained_models/inception_v3.ckpt') # '/Users/boris/Downloads/inception_v3.ckpt'
     parser.add_argument('--num_filters', type=int, default=64)
     parser.add_argument('--num_units_in_block', type=int, default=3)
@@ -235,17 +236,21 @@ def _get_scope(is_training, flags):
     :param flags: overall settings of the model
     :return: convolutional and dropout scopes
     """
-
     normalizer_params = {
-        'epsilon': 0.001,
-        'momentum': .95,
-        'trainable': is_training,
-        'training': is_training,
+        'epsilon': 1e-6,
+        'decay': .95,
+        'center': True,
+        'scale': True,
+        'trainable': True,
+        'is_training': is_training,
+        'updates_collections': None, # tf.GraphKeys.UPDATE_OPS
+        'param_regularizers': {'beta': tf.contrib.layers.l2_regularizer(scale=flags.weight_decay),
+                               'gamma': tf.contrib.layers.l2_regularizer(scale=flags.weight_decay)},
     }
     conv2d_arg_scope = slim.arg_scope(
-        [slim.conv2d, slim.fully_connected],
+        [slim.conv2d],
         activation_fn=ACTIVATION_MAP[flags.activation],
-        normalizer_fn=tf.layers.batch_normalization,
+        normalizer_fn=tf.contrib.layers.batch_norm,
         normalizer_params=normalizer_params,
         # padding='SAME',
         trainable=is_training,
@@ -285,7 +290,7 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
                 h = h + shortcut
 
                 h = activation_fn(h, name='activation_' + str(i) + '_' + str(flags.num_units_in_block - 1))
-                if i < len(num_filters):
+                if i < (len(num_filters)-1):
                     h = slim.max_pool2d(h, kernel_size=2, stride=2, padding='SAME', scope='max_pool' + str(i))
 
             if flags.embedding_pooled:
@@ -374,7 +379,7 @@ def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training
         mask = tf.expand_dims(tf.sequence_mask(text_length, maxlen=tf.shape(text)[1], dtype=tf.float32), axis=-1)
         h = tf.reduce_sum(tf.multiply(h, mask), axis=[1]) / tf.reduce_sum(mask, axis=[1])
         # this is the adaptor to match the size of the image extractor
-        h = tf.contrib.layers.fully_connected(h, num_outputs=embedding_size)
+#         h = tf.contrib.layers.fully_connected(h, num_outputs=embedding_size)
     return h
 
 
