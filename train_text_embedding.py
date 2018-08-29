@@ -31,7 +31,6 @@ from tensorflow.contrib.slim.nets import inception
 from shutil import copy
 from typing import List, Dict
 
-# TODO: destroy order in batches
 # TODO: connect to borgy
 
 '''
@@ -466,7 +465,7 @@ def get_input_placeholders(batch_size, image_size, scope):
         images_placeholder = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, 3), name='images')
         text_placeholder = tf.placeholder(shape=(batch_size, None), name='text', dtype=tf.int32)
         text_length_placeholder = tf.placeholder(shape=(batch_size,), name='text_len', dtype=tf.int32)
-        labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size,), name='class_labels')
+        labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size,), name='match_labels')
         return images_placeholder, text_placeholder, text_length_placeholder, labels_placeholder
 
 
@@ -562,7 +561,9 @@ class SsenseDataset(object):
 
         images = self.get_images(img_names)
         texts, text_length = self.get_text(img_names)
-        return images, texts, text_length
+        # Shuffling the text to avoid having a trivial relation between image indexes and text indexes
+        match_labels = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
+        return images, texts[match_labels], text_length[match_labels], match_labels
 
     def sequential_batches(self, batch_size, n_batches, rng=np.random):
         """Generator for a random sequence of minibatches with no overlap."""
@@ -605,14 +606,14 @@ class ModelLoader:
         image_size = get_image_size(flags.data_dir)
 
         with tf.Graph().as_default():
-            images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=batch_size,
+            images_pl, text_pl, text_len_pl, match_labels_pl = get_input_placeholders(batch_size=batch_size,
                                                                                 image_size=image_size, scope='inputs')
             logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags,
                                              is_training=False)
             self.images_pl = images_pl
             self.text_pl = text_pl
             self.text_len_pl = text_len_pl
-            self.labels_pl = labels_pl
+            self.match_labels_pl = match_labels_pl
             self.image_embeddings = image_embeddings
             self.text_embeddings = text_embeddings
 
@@ -640,25 +641,25 @@ class ModelLoader:
                      self.text_len_pl: text_len}
         return self.sess.run([self.logits, self.image_embeddings, self.text_embeddings], feed_dict)
 
-    def eval(self, data_set=None, num_samples=100):
+    def eval(self, data_set: Dict[str, SsenseDataset]=None, num_samples: int=100):
         """
         Runs evaluation loop over dataset
         :param data_set:
+        :param num_samples: number of tasks to sample from the dataset
         :return:
         """
         num_correct = 0.0
         num_tot = 0.0
-#         for images, texts, text_len in data_set.sequential_batches(batch_size=self.batch_size, n_batches=num_batches):
         for i in trange(num_samples):
-            images, texts, text_len = data_set.next_batch(batch_size=self.batch_size)
+            images, texts, text_len, match_labels = data_set.next_batch(batch_size=self.batch_size)
             feed_dict = {self.images_pl: images.astype(dtype=np.float32),
                          self.text_pl: texts,
-                         self.text_len_pl: text_len}
+                         self.text_len_pl: text_len,
+                         self.match_labels_pl: match_labels}
             logits = self.sess.run(self.logits, feed_dict)
             labels_pred = np.argmax(logits, axis=-1)
 
-            labels = np.arange(self.batch_size)
-            num_matches = sum(labels_pred == labels)
+            num_matches = sum(labels_pred == match_labels)
             num_correct += num_matches
             num_tot += len(labels_pred)
 
@@ -721,10 +722,10 @@ def train(flags):
     datasets = get_train_datasets()
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
-        images_pl, text_pl, text_len_pl, labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
+        images_pl, text_pl, text_len_pl, match_labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
                                                       image_size=image_size, scope='inputs')
 
-        misassociation_labels = tf.eye(flags.train_batch_size, dtype=tf.float32)
+        misassociation_labels = tf.one_hot(match_labels_pl, flags.train_batch_size)
         logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=True)
         loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
@@ -732,7 +733,7 @@ def train(flags):
 
         regu_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         loss = tf.add_n([loss] + regu_losses)
-        misclass = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), tf.argmax(misassociation_labels, 1))
+        misclass = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), match_labels_pl)
         main_train_op = get_main_train_op(loss, global_step, flags)
 
         tf.summary.scalar('loss', loss)
@@ -764,11 +765,12 @@ def train(flags):
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
                 dt_batch = time.time()
-                images, text, text_length = datasets['train'].next_batch(batch_size=flags.train_batch_size)
+                images, text, text_length, match_labels = datasets['train'].next_batch(batch_size=flags.train_batch_size)
                 dt_batch = time.time() - dt_batch
                 # if flags.augment:
                 #     images = image_augment(images)
-                feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length}
+                feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length,
+                             match_labels_pl: match_labels}
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
