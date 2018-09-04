@@ -79,7 +79,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=2,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.001011, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.00101, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -447,6 +447,7 @@ def get_inference_graph(images, text, text_length, flags, is_training):
         text_embedding_size = image_embeddings.get_shape().as_list()[-1]
         text_embeddings = get_text_feature_extractor(text, text_length, flags, embedding_size=text_embedding_size,
                                                      is_training=is_training, scope='text_feature_extractor', reuse=False)
+
         # Here we compute logits of correctly matching text to a given image.
         # We could also compute logits of correctly matching an image to a given text by reversing
         # image_embeddings and text_embeddings
@@ -562,8 +563,12 @@ class SsenseDataset(object):
         images = self.get_images(img_names)
         texts, text_length = self.get_text(img_names)
         # Shuffling the text to avoid having a trivial relation between image indexes and text indexes
-        match_labels = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
-        return images, texts[match_labels], text_length[match_labels], match_labels
+        permutation = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
+        labels_img2txt = np.arange(batch_size, dtype=np.int32)
+        for i in range(batch_size):
+            labels_img2txt[permutation[i]] = i
+        labels_txt2img = permutation
+        return images, texts[permutation], text_length[permutation], (labels_img2txt, labels_txt2img)
 
     def sequential_batches(self, batch_size, n_batches, rng=np.random):
         """Generator for a random sequence of minibatches with no overlap."""
@@ -652,14 +657,14 @@ class ModelLoader:
         num_tot = 0.0
         for i in trange(num_samples):
             images, texts, text_len, match_labels = data_set.next_batch(batch_size=self.batch_size)
+            labels_img2txt, labels_txt2img = match_labels
             feed_dict = {self.images_pl: images.astype(dtype=np.float32),
                          self.text_pl: texts,
-                         self.text_len_pl: text_len,
-                         self.match_labels_pl: match_labels}
+                         self.text_len_pl: text_len}
             logits = self.sess.run(self.logits, feed_dict)
             labels_pred = np.argmax(logits, axis=-1)
 
-            num_matches = sum(labels_pred == match_labels)
+            num_matches = sum(labels_pred == labels_img2txt)
             num_correct += num_matches
             num_tot += len(labels_pred)
 
@@ -766,17 +771,26 @@ def train(flags):
                 # get batch of data to compute classification loss
                 dt_batch = time.time()
                 images, text, text_length, match_labels = datasets['train'].next_batch(batch_size=flags.train_batch_size)
+                labels_txt2img, labels_img2txt = match_labels
                 dt_batch = time.time() - dt_batch
                 # if flags.augment:
                 #     images = image_augment(images)
-                feed_dict = {images_pl: images.astype(dtype=np.float32), text_pl: text, text_len_pl: text_length,
-                             match_labels_pl: match_labels}
+                
+                feed_dict = {images_pl: images.astype(dtype=np.float32), text_len_pl: text_length,
+                             text_pl: text, 
+                             match_labels_pl: labels_txt2img}
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
                     summary_writer.add_summary(summary_str, step)
                     summary_writer.flush()
                     logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train, dt_batch))
+                    
+                if step % 100 == 0:
+                    logits_img2txt = sess.run(logits, feed_dict=feed_dict)
+                    logits_img2txt = np.argmax(logits_img2txt, axis=0)
+                    num_matches = float(sum(labels_img2txt == logits_img2txt))
+                    logging.info("img2txt acc: %.3g" %(num_matches/flags.train_batch_size))
 
                 t_train = time.time()
                 loss = sess.run(main_train_op, feed_dict=feed_dict)
