@@ -77,9 +77,9 @@ def get_arguments():
     parser.add_argument('--num_shots_train', type=int, default=5,
                         help='Number of shots in a few shot meta-train scenario')
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
-    parser.add_argument('--num_tasks_per_batch', type=int, default=2,
+    parser.add_argument('--num_tasks_per_batch', type=int, default=1,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.00101, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.00102, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -99,7 +99,7 @@ def get_arguments():
     parser.add_argument('--eval_interval_secs', type=int, default=120, help='Time between evaluating model?')
     parser.add_argument('--eval_interval_steps', type=int, default=1000,
                         help='Number of train steps between evaluating model in the training loop')
-    parser.add_argument('--eval_interval_fine_steps', type=int, default=250,
+    parser.add_argument('--eval_interval_fine_steps', type=int, default=1000,
                         help='Number of train steps between evaluating model in the training loop in the final phase')
     parser.add_argument('--num_samples_eval', type=int, default=100, help='Number of evaluation samples?')
     parser.add_argument('--eval_batch_size', type=int, default=32, help='Evaluation batch size?')
@@ -678,8 +678,8 @@ def eval_once(flags: Namespace, datasets: Dict[str, SsenseDataset]):
     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
     results = {}
     for data_name, dataset in datasets.items():
-        results = model.eval(data_set=dataset, num_samples=flags.num_samples_eval)
-        for result_name, result_val in results.items():
+        results_eval = model.eval(data_set=dataset, num_samples=flags.num_samples_eval)
+        for result_name, result_val in results_eval.items():
             results["evaluation/"+result_name+"_"+data_name] = result_val
             logging.info("accuracy_%s: %.3g" % (result_name+"_"+data_name, result_val))
     
@@ -756,7 +756,7 @@ def train(flags):
         tf.summary.scalar('loss/txt2img', loss_txt2img)
         tf.summary.scalar('loss/img2txt', loss_img2txt)
         tf.summary.scalar('misclassification/txt2img', misclass_txt2img)
-        tf.summary.scalar('misclassification/txt2img', misclass_img2txt)
+        tf.summary.scalar('misclassification/img2txt', misclass_img2txt)
         summary = tf.summary.merge(tf.get_collection('summaries'))
 
         # Define session and logging
