@@ -466,8 +466,9 @@ def get_input_placeholders(batch_size, image_size, scope):
         images_placeholder = tf.placeholder(tf.float32, shape=(batch_size, image_size, image_size, 3), name='images')
         text_placeholder = tf.placeholder(shape=(batch_size, None), name='text', dtype=tf.int32)
         text_length_placeholder = tf.placeholder(shape=(batch_size,), name='text_len', dtype=tf.int32)
-        labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size,), name='match_labels')
-        return images_placeholder, text_placeholder, text_length_placeholder, labels_placeholder
+        labels_txt2img = tf.placeholder(tf.int64, shape=(batch_size,), name='match_labels_txt2img')
+        labels_img2txt = tf.placeholder(tf.int64, shape=(batch_size,), name='match_labels_img2txt')
+        return images_placeholder, text_placeholder, text_length_placeholder, labels_txt2img, labels_img2txt
 
 
 def get_lr(global_step=None, flags=None):
@@ -564,11 +565,11 @@ class SsenseDataset(object):
         texts, text_length = self.get_text(img_names)
         # Shuffling the text to avoid having a trivial relation between image indexes and text indexes
         permutation = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
-        labels_img2txt = np.arange(batch_size, dtype=np.int32)
+        labels_txt2img = np.arange(batch_size, dtype=np.int32)
         for i in range(batch_size):
-            labels_img2txt[permutation[i]] = i
-        labels_txt2img = permutation
-        return images, texts[permutation], text_length[permutation], (labels_img2txt, labels_txt2img)
+            labels_txt2img[permutation[i]] = i
+        labels_img2txt = permutation
+        return images, texts[permutation], text_length[permutation], (labels_txt2img, labels_img2txt)
 
     def sequential_batches(self, batch_size, n_batches, rng=np.random):
         """Generator for a random sequence of minibatches with no overlap."""
@@ -611,20 +612,20 @@ class ModelLoader:
         image_size = get_image_size(flags.data_dir)
 
         with tf.Graph().as_default():
-            images_pl, text_pl, text_len_pl, match_labels_pl = get_input_placeholders(batch_size=batch_size,
-                                                                                image_size=image_size, scope='inputs')
-            logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags,
-                                             is_training=False)
+            images_pl, text_pl, text_len_pl, match_labels_txt2img, match_labels_img2txt = get_input_placeholders(
+                batch_size=batch_size,
+                image_size=image_size, scope='inputs')
+            logits, image_embeddings, text_embeddings = get_inference_graph(
+                images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=False)
             self.images_pl = images_pl
             self.text_pl = text_pl
             self.text_len_pl = text_len_pl
-            self.match_labels_pl = match_labels_pl
+            self.match_labels_txt2img_pl = match_labels_txt2img
+            self.match_labels_img2txt_pl = match_labels_img2txt
             self.image_embeddings = image_embeddings
             self.text_embeddings = text_embeddings
 
-            init_fn = slim.assign_from_checkpoint_fn(
-                latest_checkpoint,
-                tf.global_variables())
+            init_fn = slim.assign_from_checkpoint_fn(latest_checkpoint, tf.global_variables())
 
             config = tf.ConfigProto(allow_soft_placement=True)
             config.gpu_options.allow_growth = True
@@ -653,22 +654,23 @@ class ModelLoader:
         :param num_samples: number of tasks to sample from the dataset
         :return:
         """
-        num_correct = 0.0
+        num_correct_txt2img = 0.0
+        num_correct_img2txt = 0.0
         num_tot = 0.0
         for i in trange(num_samples):
             images, texts, text_len, match_labels = data_set.next_batch(batch_size=self.batch_size)
-            labels_img2txt, labels_txt2img = match_labels
+            labels_txt2img, labels_img2txt = match_labels
             feed_dict = {self.images_pl: images.astype(dtype=np.float32),
                          self.text_pl: texts,
                          self.text_len_pl: text_len}
             logits = self.sess.run(self.logits, feed_dict)
-            labels_pred = np.argmax(logits, axis=-1)
+            labels_pred_txt2img = np.argmax(logits, axis=-1)
+            labels_pred_img2txt = np.argmax(logits, axis=0)
 
-            num_matches = sum(labels_pred == labels_img2txt)
-            num_correct += num_matches
-            num_tot += len(labels_pred)
-
-        return num_correct / num_tot
+            num_correct_txt2img += sum(labels_pred_txt2img == labels_txt2img)
+            num_correct_img2txt += sum(labels_pred_img2txt == labels_img2txt)
+            num_tot += len(labels_pred_txt2img)
+        return {'acc_txt2img': num_correct_txt2img / num_tot, 'acc_img2txt': num_correct_img2txt / num_tot}
 
 
 def eval_once(flags: Namespace, datasets: Dict[str, SsenseDataset]):
@@ -676,9 +678,10 @@ def eval_once(flags: Namespace, datasets: Dict[str, SsenseDataset]):
     model = ModelLoader(model_path=flags.pretrained_model_dir, batch_size=flags.eval_batch_size)
     results = {}
     for data_name, dataset in datasets.items():
-        acc = model.eval(data_set=dataset, num_samples=flags.num_samples_eval)
-        results["evaluation/"+data_name] = acc
-        logging.info("accuracy_%s: %.3g" % (data_name, acc))
+        results = model.eval(data_set=dataset, num_samples=flags.num_samples_eval)
+        for result_name, result_val in results.items():
+            results["evaluation/"+result_name+"_"+data_name] = result_val
+            logging.info("accuracy_%s: %.3g" % (result_name+"_"+data_name, result_val))
     
     log_dir = get_logdir_name(flags)
     eval_writer = summary_writer(log_dir + '/eval')
@@ -710,8 +713,8 @@ def test_pretrained_inception_model(images_pl, sess):
         im = np.tile(im, [images_pl.get_shape().as_list()[0], 1, 1, 1])
         logit_values = sess.run(inception_logits_pl, feed_dict={images_pl: im})
         print(image)
-        print (np.max(logit_values, axis=-1))
-        print (np.argmax(logit_values, axis=-1)-1)
+        print(np.max(logit_values, axis=-1))
+        print(np.argmax(logit_values, axis=-1)-1)
     
         
 def train(flags):
@@ -727,22 +730,33 @@ def train(flags):
     datasets = get_train_datasets()
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
-        images_pl, text_pl, text_len_pl, match_labels_pl = get_input_placeholders(batch_size=flags.train_batch_size,
-                                                      image_size=image_size, scope='inputs')
+        images_pl, text_pl, text_len_pl, match_labels_txt2img_pl, match_labels_img2txt_pl = \
+            get_input_placeholders(batch_size=flags.train_batch_size,
+                                   image_size=image_size, scope='inputs')
 
-        misassociation_labels = tf.one_hot(match_labels_pl, flags.train_batch_size)
-        logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl, text_length=text_len_pl, flags=flags, is_training=True)
-        loss = tf.reduce_mean(
+        logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl,
+                                                                        text_length=text_len_pl, flags=flags,
+                                                                        is_training=True)
+        loss_txt2img = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
-                                                    labels=misassociation_labels))
+                                                    labels=tf.one_hot(match_labels_txt2img_pl, flags.train_batch_size)),
+                                                    name='loss_txt2img')
+        loss_img2txt = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(logits=tf.transpose(logits, perm=[1, 0]),
+                                                    labels=tf.one_hot(match_labels_img2txt_pl, flags.train_batch_size)),
+                                                    name='loss_img2txt')
 
         regu_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-        loss = tf.add_n([loss] + regu_losses)
-        misclass = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), match_labels_pl)
-        main_train_op = get_main_train_op(loss, global_step, flags)
+        loss_tot = tf.add_n([0.5*loss_txt2img + 0.5*loss_img2txt] + regu_losses)
+        misclass_txt2img = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), match_labels_txt2img_pl)
+        misclass_img2txt = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 0), match_labels_img2txt_pl)
+        main_train_op = get_main_train_op(loss_tot, global_step, flags)
 
-        tf.summary.scalar('loss', loss)
-        tf.summary.scalar('misclassification', misclass)
+        tf.summary.scalar('loss/total', loss_tot)
+        tf.summary.scalar('loss/txt2img', loss_txt2img)
+        tf.summary.scalar('loss/img2txt', loss_img2txt)
+        tf.summary.scalar('misclassification/txt2img', misclass_txt2img)
+        tf.summary.scalar('misclassification/txt2img', misclass_img2txt)
         summary = tf.summary.merge(tf.get_collection('summaries'))
 
         # Define session and logging
@@ -766,7 +780,7 @@ def train(flags):
             if checkpoint_step > 0:
                 checkpoint_step += 1
 
-            loss, dt_train = 0.0, 0.0
+            loss_tot, dt_train = 0.0, 0.0
             for step in range(checkpoint_step, flags.number_of_steps):
                 # get batch of data to compute classification loss
                 dt_batch = time.time()
@@ -777,14 +791,14 @@ def train(flags):
                 #     images = image_augment(images)
                 
                 feed_dict = {images_pl: images.astype(dtype=np.float32), text_len_pl: text_length,
-                             text_pl: text, 
-                             match_labels_pl: labels_txt2img}
+                             text_pl: text,
+                             match_labels_txt2img_pl: labels_txt2img, match_labels_img2txt_pl: labels_img2txt}
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
                     summary_writer.add_summary(summary_str, step)
                     summary_writer.flush()
-                    logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss, dt_train, dt_batch))
+                    logging.info("step %d, loss : %.4g, dt: %.3gs, dt_batch: %.3gs" % (step, loss_tot, dt_train, dt_batch))
                     
                 if step % 100 == 0:
                     logits_img2txt = sess.run(logits, feed_dict=feed_dict)
@@ -793,14 +807,12 @@ def train(flags):
                     logging.info("img2txt acc: %.3g" %(num_matches/flags.train_batch_size))
 
                 t_train = time.time()
-                loss = sess.run(main_train_op, feed_dict=feed_dict)
+                loss_tot = sess.run(main_train_op, feed_dict=feed_dict)
                 dt_train = time.time() - t_train
 
                 if step % flags.eval_interval_steps == 0:
                     saver.save(sess, os.path.join(log_dir, 'model'), global_step=step)
                     eval_once(flags, datasets=datasets)
-
-    return None
 
 
 def test():
