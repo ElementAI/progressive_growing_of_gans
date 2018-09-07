@@ -126,6 +126,7 @@ def get_arguments():
     parser.add_argument('--num_max_pools', type=int, default=3)
     parser.add_argument('--block_size_growth', type=float, default=2.0)
     parser.add_argument('--activation', type=str, default='relu', choices=['relu', 'selu', 'swish-1'])
+    parser.add_argument('--train_bn_proba', type=float, default=1.0, help='Probability that batch norm/dropout layers are in train mode during training')
     # Text feature extractor
     parser.add_argument('--word_embed_dim', type=int, default=128)
     parser.add_argument('--vocab_size', type=int, default=10000)
@@ -252,7 +253,7 @@ def _get_scope(is_training, flags):
         normalizer_fn=tf.contrib.layers.batch_norm,
         normalizer_params=normalizer_params,
         # padding='SAME',
-        trainable=is_training,
+        trainable=True,
         weights_regularizer=tf.contrib.layers.l2_regularizer(scale=flags.weight_decay),
         weights_initializer=ScaledVarianceRandomNormal(factor=flags.weights_initializer_factor),
         biases_initializer=tf.constant_initializer(0.0)
@@ -310,7 +311,11 @@ def get_simple_res_net(images, flags, num_filters, is_training=False, reuse=None
 
 def get_inception_v3(images, flags, is_training=False, reuse=None, scope=None):
     arg_scope = inception.inception_v3_arg_scope()
-    training_flag = is_training and flags.image_fe_trainable
+    if isinstance(is_training, tf.Variable):
+        image_fe_trainable = tf.Variable(flags.image_fe_trainable, trainable=False, name='image_fe_trainable', dtype=tf.bool)
+        is_training_inception = tf.logical_and(is_training, image_fe_trainable)
+    else:
+        is_training_inception = is_training and flags.image_fe_trainable
     with slim.arg_scope(arg_scope):
         with tf.variable_scope(scope or 'image_feature_extractor', reuse=reuse):
             images = tf.image.resize_bilinear(images, size=[299, 299], align_corners=False)
@@ -318,7 +323,8 @@ def get_inception_v3(images, flags, is_training=False, reuse=None, scope=None):
             scaled_input_tensor = tf.subtract(scaled_input_tensor, 0.5)
             scaled_input_tensor = tf.multiply(scaled_input_tensor, 2.0)
 
-            logits, end_points = inception.inception_v3(scaled_input_tensor, is_training=training_flag, num_classes=1001,
+            logits, end_points = inception.inception_v3(scaled_input_tensor,
+                                                        is_training=is_training_inception, num_classes=1001,
                                                         reuse=reuse)
             h = end_points['PreLogits']
             h = slim.flatten(h)
@@ -360,7 +366,7 @@ def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training
         h = tf.contrib.layers.embed_sequence(text,
                                              vocab_size=flags.vocab_size,
                                              embed_dim=flags.word_embed_dim,
-                                             trainable=is_training,
+                                             trainable=True,
                                              scope='TextEmbedding')
 
         cells_fw = [tf.nn.rnn_cell.LSTMCell(size) for size in [256]]
@@ -730,13 +736,14 @@ def train(flags):
     datasets = get_train_datasets()
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
+        is_training = tf.Variable(True, trainable=False, name='is_training', dtype=tf.bool)
         images_pl, text_pl, text_len_pl, match_labels_txt2img_pl, match_labels_img2txt_pl = \
             get_input_placeholders(batch_size=flags.train_batch_size,
                                    image_size=image_size, scope='inputs')
 
         logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl,
                                                                         text_length=text_len_pl, flags=flags,
-                                                                        is_training=True)
+                                                                        is_training=is_training)
         loss_txt2img = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                     labels=tf.one_hot(match_labels_txt2img_pl, flags.train_batch_size)),
@@ -792,7 +799,8 @@ def train(flags):
                 
                 feed_dict = {images_pl: images.astype(dtype=np.float32), text_len_pl: text_length,
                              text_pl: text,
-                             match_labels_txt2img_pl: labels_txt2img, match_labels_img2txt_pl: labels_img2txt}
+                             match_labels_txt2img_pl: labels_txt2img, match_labels_img2txt_pl: labels_img2txt,
+                             is_training: np.random.uniform() < flags.train_bn_proba}
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
