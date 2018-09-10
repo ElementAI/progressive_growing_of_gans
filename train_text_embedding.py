@@ -775,14 +775,24 @@ def train(flags):
             
             consistency_loss_img2txt = tf.reduce_mean(
                 tf.nn.softmax_cross_entropy_with_logits(logits=image_distances,
-                                                               labels=tf.nn.softmax(text_distances),
-                                                               name='consistency_loss_img2txt'))
+                                                        labels=tf.nn.softmax(text_distances),
+                                                        name='consistency_loss_img2txt'))
             consistency_loss_txt2img = tf.reduce_mean(
                 tf.nn.softmax_cross_entropy_with_logits(logits=text_distances,
-                                                               labels=tf.nn.softmax(image_distances),
-                                                               name='consistency_loss_txt2img'))
+                                                        labels=tf.nn.softmax(image_distances),
+                                                        name='consistency_loss_txt2img'))
+
+            uniform = tf.fill([flags.train_batch_size // 2, flags.train_batch_size // 2], 1.0/float(flags.train_batch_size),
+                              name='uniform_distribution')
+            uniform_penalty_images = -tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(logits=image_distances, labels=uniform,
+                                                        name='uniform_penalty_images'))
+            uniform_penalty_text = -tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(logits=text_distances, labels=uniform,
+                                                        name='uniform_penalty_text'))
 
             consistency_loss = 0.5 * consistency_loss_img2txt + 0.5 * consistency_loss_txt2img
+            consistency_loss += 0.5*uniform_penalty_images + 0.5*uniform_penalty_text
             
             tf.summary.scalar('loss/consistency', consistency_loss)
             consistency_loss_weighted = global_consistency_weight * consistency_loss
