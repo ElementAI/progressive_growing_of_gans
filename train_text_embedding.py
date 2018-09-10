@@ -142,7 +142,7 @@ def get_arguments():
                         help='multiplier of cosine metric trainability')
     parser.add_argument('--polynomial_metric_order', type=int, default=1)
     # Global consistency term
-    parser.add_argument('--global_consistency_weight', type=float, default=None,
+    parser.add_argument('--global_consistency_weight', type=float, default=0.5,
                         help='The weight of the global consistency term between text and image')
 
 
@@ -775,7 +775,7 @@ def train(flags):
                                                 flags=None, is_training=None, scope='image_distances')
             text_distances = get_distance_head(embedding_mod1=text_embeddings, embedding_mod2=text_embeddings_2,
                                                flags=None, is_training=None, scope='text_distances')
-            consistency_loss = tf.norm(image_distances-text_distances, 'consistency_norm') / \
+            consistency_loss = tf.norm(image_distances-text_distances, name='consistency_norm') / \
                 float(flags.train_batch_size*flags.train_batch_size)
             tf.summary.scalar('loss/consistency', consistency_loss)
             consistency_loss_weighted = flags.global_consistency_weight * consistency_loss
