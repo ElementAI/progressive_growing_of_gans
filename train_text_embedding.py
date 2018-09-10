@@ -76,7 +76,7 @@ def get_arguments():
                         help='Number of classes in the train phase, this is coming from the prototypical networks')
     parser.add_argument('--num_shots_train', type=int, default=5,
                         help='Number of shots in a few shot meta-train scenario')
-    parser.add_argument('--train_batch_size', type=int, default=16, help='Training batch size.')
+    parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=1,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
     parser.add_argument('--init_learning_rate', type=float, default=0.00106, help='Initial learning rate.')
@@ -142,7 +142,7 @@ def get_arguments():
                         help='multiplier of cosine metric trainability')
     parser.add_argument('--polynomial_metric_order', type=int, default=1)
     # Global consistency term
-    parser.add_argument('--global_consistency_weight', type=float, default=None,
+    parser.add_argument('--global_consistency_weight', type=float, default=0.01,
                         help='The weight of the global consistency term between text and image')
 
 
@@ -765,16 +765,12 @@ def train(flags):
 
         if flags.global_consistency_weight:
             # TODO: This part doesn't work if shuffle_text_in_batch is TRUE
-            images_pl_2, text_pl_2, text_len_pl_2, match_labels_txt2img_pl_2, match_labels_img2txt_pl_2 = \
-                get_input_placeholders(batch_size=flags.train_batch_size,
-                                       image_size=image_size, scope='inputs_2')
+            image_embeddings_1, image_embeddings_2 = tf.split(image_embeddings, num_or_size_splits=2, axis=0)
+            text_embeddings_1, text_embeddings_2 = tf.split(text_embeddings, num_or_size_splits=2, axis=0)
 
-            logits_2, image_embeddings_2, text_embeddings_2 = get_inference_graph(images=images_pl_2, text=text_pl_2,
-                                                                                  text_length=text_len_pl_2, flags=flags,
-                                                                                  is_training=True, reuse=True)
-            image_distances = get_distance_head(embedding_mod1=image_embeddings, embedding_mod2=image_embeddings_2,
+            image_distances = get_distance_head(embedding_mod1=image_embeddings_1, embedding_mod2=image_embeddings_2,
                                                 flags=None, is_training=None, scope='image_distances')
-            text_distances = get_distance_head(embedding_mod1=text_embeddings, embedding_mod2=text_embeddings_2,
+            text_distances = get_distance_head(embedding_mod1=text_embeddings_1, embedding_mod2=text_embeddings_2,
                                                flags=None, is_training=None, scope='text_distances')
             
             consistency_loss_img2txt = tf.reduce_mean(
@@ -843,11 +839,7 @@ def train(flags):
                              is_training: np.random.uniform() < flags.train_bn_proba}
 
                 if flags.global_consistency_weight:
-                    images_2, text_2, text_length_2, match_labels_2 = datasets['train'].next_batch(
-                        batch_size=flags.train_batch_size)
-                    feed_dict_2 = {images_pl_2: images_2.astype(dtype=np.float32), text_len_pl_2: text_length_2,
-                                   text_pl_2: text_2, global_consistency_weight: 0.0}
-                    feed_dict.update(feed_dict_2)
+                    feed_dict.update({global_consistency_weight: flags.global_consistency_weight})
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
