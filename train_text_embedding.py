@@ -76,10 +76,10 @@ def get_arguments():
                         help='Number of classes in the train phase, this is coming from the prototypical networks')
     parser.add_argument('--num_shots_train', type=int, default=5,
                         help='Number of shots in a few shot meta-train scenario')
-    parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
+    parser.add_argument('--train_batch_size', type=int, default=16, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=1,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.00105, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.00106, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -142,7 +142,7 @@ def get_arguments():
                         help='multiplier of cosine metric trainability')
     parser.add_argument('--polynomial_metric_order', type=int, default=1)
     # Global consistency term
-    parser.add_argument('--global_consistency_weight', type=float, default=0.5,
+    parser.add_argument('--global_consistency_weight', type=float, default=None,
                         help='The weight of the global consistency term between text and image')
 
 
@@ -746,6 +746,7 @@ def train(flags):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
         is_training = tf.Variable(True, trainable=False, name='is_training', dtype=tf.bool)
+        global_consistency_weight = tf.Variable(0.0, trainable=False, name='global_consistency_weight', dtype=tf.float32)
         images_pl, text_pl, text_len_pl, match_labels_txt2img_pl, match_labels_img2txt_pl = \
             get_input_placeholders(batch_size=flags.train_batch_size,
                                    image_size=image_size, scope='inputs')
@@ -775,10 +776,20 @@ def train(flags):
                                                 flags=None, is_training=None, scope='image_distances')
             text_distances = get_distance_head(embedding_mod1=text_embeddings, embedding_mod2=text_embeddings_2,
                                                flags=None, is_training=None, scope='text_distances')
-            consistency_loss = tf.norm(image_distances-text_distances, name='consistency_norm') / \
-                float(flags.train_batch_size*flags.train_batch_size)
+            
+            consistency_loss_img2txt = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(logits=image_distances,
+                                                               labels=tf.nn.softmax(text_distances),
+                                                               name='consistency_loss_img2txt'))
+            consistency_loss_txt2img = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(logits=text_distances,
+                                                               labels=tf.nn.softmax(image_distances),
+                                                               name='consistency_loss_txt2img'))
+
+            consistency_loss = 0.5 * consistency_loss_img2txt + 0.5 * consistency_loss_txt2img
+            
             tf.summary.scalar('loss/consistency', consistency_loss)
-            consistency_loss_weighted = flags.global_consistency_weight * consistency_loss
+            consistency_loss_weighted = global_consistency_weight * consistency_loss
         else:
             consistency_loss_weighted = 0.0
 
@@ -835,7 +846,7 @@ def train(flags):
                     images_2, text_2, text_length_2, match_labels_2 = datasets['train'].next_batch(
                         batch_size=flags.train_batch_size)
                     feed_dict_2 = {images_pl_2: images_2.astype(dtype=np.float32), text_len_pl_2: text_length_2,
-                                   text_pl_2: text_2}
+                                   text_pl_2: text_2, global_consistency_weight: 0.0}
                     feed_dict.update(feed_dict_2)
 
                 if step % 100 == 0:
