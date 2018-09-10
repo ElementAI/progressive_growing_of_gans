@@ -79,7 +79,7 @@ def get_arguments():
     parser.add_argument('--train_batch_size', type=int, default=32, help='Training batch size.')
     parser.add_argument('--num_tasks_per_batch', type=int, default=1,
                         help='Number of few shot tasks per batch, so the task encoding batch is num_tasks_per_batch x num_classes_test x num_shots_train .')
-    parser.add_argument('--init_learning_rate', type=float, default=0.00102, help='Initial learning rate.')
+    parser.add_argument('--init_learning_rate', type=float, default=0.00105, help='Initial learning rate.')
     parser.add_argument('--save_summaries_secs', type=int, default=60, help='Time between saving summaries')
     parser.add_argument('--save_interval_secs', type=int, default=60, help='Time between saving model?')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
@@ -132,7 +132,7 @@ def get_arguments():
     parser.add_argument('--vocab_size', type=int, default=10000)
     parser.add_argument('--text_feature_extractor', type=str, default='simple_bi_lstm', choices=['simple_bi_lstm'])
 
-    parser.add_argument('--embedding_size', type=int, default=None)
+    parser.add_argument('--embedding_size', type=int, default=1024)
     parser.add_argument('--embedding_pooled', type=bool, default=True)
 
     parser.add_argument('--metric_multiplier_init', type=float, default=10.0, help='multiplier of cosine metric')
@@ -243,7 +243,7 @@ def _get_scope(is_training, flags):
         'scale': True,
         'trainable': True,
         'is_training': is_training,
-        'updates_collections': None, # tf.GraphKeys.UPDATE_OPS
+        'updates_collections': tf.GraphKeys.UPDATE_OPS, # [tf.GraphKeys.UPDATE_OPS, None]
         'param_regularizers': {'beta': tf.contrib.layers.l2_regularizer(scale=flags.weight_decay),
                                'gamma': tf.contrib.layers.l2_regularizer(scale=flags.weight_decay)},
     }
@@ -384,7 +384,7 @@ def get_simple_bi_lstm(text, text_length, flags, embedding_size=512, is_training
         mask = tf.expand_dims(tf.sequence_mask(text_length, maxlen=tf.shape(text)[1], dtype=tf.float32), axis=-1)
         h = tf.reduce_sum(tf.multiply(h, mask), axis=[1]) / tf.reduce_sum(mask, axis=[1])
         # this is the adaptor to match the size of the image extractor
-#         h = tf.contrib.layers.fully_connected(h, num_outputs=embedding_size)
+        h = tf.contrib.layers.fully_connected(h, num_outputs=embedding_size)
     return h
 
 
@@ -743,7 +743,7 @@ def train(flags):
 
         logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl,
                                                                         text_length=text_len_pl, flags=flags,
-                                                                        is_training=is_training)
+                                                                        is_training=True)
         loss_txt2img = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                     labels=tf.one_hot(match_labels_txt2img_pl, flags.train_batch_size)),
