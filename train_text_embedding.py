@@ -131,6 +131,8 @@ def get_arguments():
     parser.add_argument('--word_embed_dim', type=int, default=128)
     parser.add_argument('--vocab_size', type=int, default=10000)
     parser.add_argument('--text_feature_extractor', type=str, default='simple_bi_lstm', choices=['simple_bi_lstm'])
+    parser.add_argument('--text_maxlen', type=int, default=100, help='Maximal length of the text description in tokens')
+    parser.add_argument('--shuffle_text_in_batch', type=bool, default=False)
 
     parser.add_argument('--embedding_size', type=int, default=1024)
     parser.add_argument('--embedding_pooled', type=bool, default=True)
@@ -139,6 +141,9 @@ def get_arguments():
     parser.add_argument('--metric_multiplier_trainable', type=bool, default=False,
                         help='multiplier of cosine metric trainability')
     parser.add_argument('--polynomial_metric_order', type=int, default=1)
+    # Global consistency term
+    parser.add_argument('--global_consistency_weight', type=float, default=None,
+                        help='The weight of the global consistency term between text and image')
 
 
     args = parser.parse_args()
@@ -435,24 +440,25 @@ def get_distance_head(embedding_mod1, embedding_mod2, flags, is_training, scope=
         return euclidian
 
 
-def get_inference_graph(images, text, text_length, flags, is_training):
+def get_inference_graph(images, text, text_length, flags, is_training, reuse=False):
     """
         Creates text embedding, image embedding and links them using a distance metric.
         Ouputs logits that can be used for training and inference, as well as text and image embeddings.
     :param images:
     :param text:
-    :param labels:
+    :param text_length:
     :param flags:
     :param is_training:
+    :param reuse:
     :return:
     """
 
     with tf.variable_scope('Model'):
         image_embeddings = get_image_feature_extractor(images, flags, is_training=is_training,
-                                                       scope='image_feature_extractor', reuse=False)
+                                                       scope='image_feature_extractor', reuse=reuse)
         text_embedding_size = image_embeddings.get_shape().as_list()[-1]
         text_embeddings = get_text_feature_extractor(text, text_length, flags, embedding_size=text_embedding_size,
-                                                     is_training=is_training, scope='text_feature_extractor', reuse=False)
+                                                     is_training=is_training, scope='text_feature_extractor', reuse=reuse)
 
         # Here we compute logits of correctly matching text to a given image.
         # We could also compute logits of correctly matching an image to a given text by reversing
@@ -530,16 +536,17 @@ def get_main_train_op(loss: tf.Tensor, global_step: tf.Variable, flags: Namespac
 class SsenseDataset(object):
     """ Basic image and text dataset generating batches from a collection of files in a folder """
 
-    def __init__(self, data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
-                 tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
-                 maxlen=100):
+    def __init__(self, data_path: str="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
+                 tokenizer_path: str='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
+                 flags: Namespace=None):
         self.data_path = data_path
         self.tokenizer_path = tokenizer_path
 
         glob_pattern = os.path.join(data_path, '*.png')
         self.image_filenames = sorted(glob.glob(glob_pattern))
         self.n_samples = len(self.image_filenames)
-        self.maxlen = maxlen
+        self.max_len = flags.text_maxlen
+        self.shuffle_text_in_batch = flags.shuffle_text_in_batch
 
         with open(self.tokenizer_path, 'rb') as f:
             self.tokenizer = pickle.load(f)
@@ -560,7 +567,7 @@ class SsenseDataset(object):
             text_tokens = self.tokenizer.texts_to_sequences([text_current])[0]
             text_length.append(len(text_tokens))
             texts.append(text_tokens)
-        texts = pad_sequences(texts, maxlen=self.maxlen, padding='post')
+        texts = pad_sequences(texts, maxlen=self.max_len, padding='post')
         return texts, np.asarray(text_length, dtype=np.int32)
 
     def next_batch(self, batch_size=64):
@@ -569,11 +576,13 @@ class SsenseDataset(object):
 
         images = self.get_images(img_names)
         texts, text_length = self.get_text(img_names)
-        # Shuffling the text to avoid having a trivial relation between image indexes and text indexes
-        permutation = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
         labels_txt2img = np.arange(batch_size, dtype=np.int32)
-        for i in range(batch_size):
-            labels_txt2img[permutation[i]] = i
+        permutation = np.arange(batch_size, dtype=np.int32)
+        # Shuffling the text to avoid having a trivial relation between image indexes and text indexes
+        if self.shuffle_text_in_batch:
+            permutation = np.random.choice(np.arange(batch_size, dtype=np.int32), size=batch_size, replace=False)
+            for i in range(batch_size):
+                labels_txt2img[permutation[i]] = i
         labels_img2txt = permutation
         return images, texts[permutation], text_length[permutation], (labels_txt2img, labels_img2txt)
 
@@ -594,16 +603,16 @@ class SsenseDataset(object):
                 break
 
 
-def get_train_datasets(data_path="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
-                       tokenizer_path='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
-                       maxlen=100,
+def get_train_datasets(data_path: str="/mnt/scratch/ssense/data_dumps/images_png_dump_256",
+                       tokenizer_path: str='/mnt/scratch/boris/ssense/tokenizer_embedding.pkl',
+                       flags: Namespace=None,
                        splits: List[str]=['train', 'test', 'validation']):
     
     assert set(splits).issubset(next(os.walk(data_path))[1]), "One or more splits doesn't exist in %s" %data_path
     datasets = {}
     for split_folder in splits:
         datasets[split_folder] = SsenseDataset(data_path=os.path.join(data_path, split_folder),
-                                              tokenizer_path=tokenizer_path, maxlen=maxlen)
+                                              tokenizer_path=tokenizer_path, flags=flags)
     return datasets
 
 
@@ -733,7 +742,7 @@ def train(flags):
     image_size = get_image_size(flags.data_dir)
 
     # Get datasets
-    datasets = get_train_datasets()
+    datasets = get_train_datasets(flags=flags)
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step', dtype=tf.int64)
         is_training = tf.Variable(True, trainable=False, name='is_training', dtype=tf.bool)
@@ -743,7 +752,7 @@ def train(flags):
 
         logits, image_embeddings, text_embeddings = get_inference_graph(images=images_pl, text=text_pl,
                                                                         text_length=text_len_pl, flags=flags,
-                                                                        is_training=True)
+                                                                        is_training=True, reuse=False)
         loss_txt2img = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                     labels=tf.one_hot(match_labels_txt2img_pl, flags.train_batch_size)),
@@ -753,8 +762,28 @@ def train(flags):
                                                     labels=tf.one_hot(match_labels_img2txt_pl, flags.train_batch_size)),
                                                     name='loss_img2txt')
 
+        if flags.global_consistency_weight:
+            # TODO: This part doesn't work if shuffle_text_in_batch is TRUE
+            images_pl_2, text_pl_2, text_len_pl_2, match_labels_txt2img_pl_2, match_labels_img2txt_pl_2 = \
+                get_input_placeholders(batch_size=flags.train_batch_size,
+                                       image_size=image_size, scope='inputs_2')
+
+            logits_2, image_embeddings_2, text_embeddings_2 = get_inference_graph(images=images_pl_2, text=text_pl_2,
+                                                                                  text_length=text_len_pl_2, flags=flags,
+                                                                                  is_training=True, reuse=True)
+            image_distances = get_distance_head(embedding_mod1=image_embeddings, embedding_mod2=image_embeddings_2,
+                                                flags=None, is_training=None, scope='image_distances')
+            text_distances = get_distance_head(embedding_mod1=text_embeddings, embedding_mod2=text_embeddings_2,
+                                               flags=None, is_training=None, scope='text_distances')
+            consistency_loss = tf.norm(image_distances-text_distances, 'consistency_norm') / \
+                float(flags.train_batch_size*flags.train_batch_size)
+            tf.summary.scalar('loss/consistency', consistency_loss)
+            consistency_loss_weighted = flags.global_consistency_weight * consistency_loss
+        else:
+            consistency_loss_weighted = 0.0
+
         regu_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-        loss_tot = tf.add_n([0.5*loss_txt2img + 0.5*loss_img2txt] + regu_losses)
+        loss_tot = tf.add_n([0.5*loss_txt2img + 0.5*loss_img2txt + consistency_loss_weighted] + regu_losses)
         misclass_txt2img = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 1), match_labels_txt2img_pl)
         misclass_img2txt = 1.0 - slim.metrics.accuracy(tf.argmax(logits, 0), match_labels_img2txt_pl)
         main_train_op = get_main_train_op(loss_tot, global_step, flags)
@@ -801,6 +830,13 @@ def train(flags):
                              text_pl: text,
                              match_labels_txt2img_pl: labels_txt2img, match_labels_img2txt_pl: labels_img2txt,
                              is_training: np.random.uniform() < flags.train_bn_proba}
+
+                if flags.global_consistency_weight:
+                    images_2, text_2, text_length_2, match_labels_2 = datasets['train'].next_batch(
+                        batch_size=flags.train_batch_size)
+                    feed_dict_2 = {images_pl_2: images_2.astype(dtype=np.float32), text_len_pl_2: text_length_2,
+                                   text_pl_2: text_2}
+                    feed_dict.update(feed_dict_2)
 
                 if step % 100 == 0:
                     summary_str = sess.run(summary, feed_dict=feed_dict)
