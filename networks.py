@@ -349,7 +349,7 @@ def l2_norm(v, eps=1e-12):
 
 
 def attention(x, ch, scope='attention'):
-    with tf.variable_scope(scope):
+    with tf.variable_scope(scope, reuse=False):
         f = conv2d(
             x, ch // 8, kernel=1)  # [bs, h, w, c']
         g = conv2d(
@@ -475,7 +475,7 @@ def G_paper_att(
                                     fmaps=nf(res - 1),
                                     kernel=3,
                                     use_wscale=use_wscale))))
-            x = attention(x, res)
+            x = attention(x, nf(res - 1))
             return x
 
     def torgb(x, res):  # res = 2..resolution_log2
