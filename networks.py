@@ -356,6 +356,7 @@ def attention(x, ch, scope='attention'):
             fact = 8
             if res_log != 8:
                 fact = 4
+            print("Downsampling x {} fact {}".format(x.shape, fact))
             _x = downscale2d(x, factor=fact)
         with tf.variable_scope('f', reuse=False):
             f = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
@@ -377,6 +378,7 @@ def attention(x, ch, scope='attention'):
         gamma = tf.cast(gamma, x.dtype)
         o = tf.reshape(o, shape=tf.shape(x))  # [bs, h, w, C]
         if res_log > 5:
+            print("Upsampling x {} fact {}".format(o.shape, fact))
             o = upscale2d(o, factor=fact)
         x = gamma * o + x
 
