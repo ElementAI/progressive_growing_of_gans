@@ -349,7 +349,7 @@ def l2_norm(v, eps=1e-8):
 
 
 def attention(x, ch, scope='attention'):
-    res_log = np.log2(ch)
+    res_log = 8 - np.log2(ch)
     _x = x
     with tf.variable_scope(scope, reuse=False):
         if res_log > 5:
@@ -376,7 +376,7 @@ def attention(x, ch, scope='attention'):
             "gamma", [1], initializer=tf.constant_initializer(0.0))
 
         gamma = tf.cast(gamma, x.dtype)
-        o = tf.reshape(o, shape=tf.shape(x))  # [bs, h, w, C]
+        o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
         if res_log > 5:
             print("Upsampling x {} fact {}".format(o.shape, fact))
             o = upscale2d(o, factor=fact)
