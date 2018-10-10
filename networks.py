@@ -494,8 +494,7 @@ def G_paper_att(
                                     use_wscale=use_wscale))))
             print("Res: {}".format(res))
             print("Nf: {}".format(nf(res - 1)))
-            if res < 5:
-                x = attention(x, nf(res - 1))
+            x = attention(x, nf(res - 1))
             return x
 
     def torgb(x, res):  # res = 2..resolution_log2
