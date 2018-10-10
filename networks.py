@@ -378,7 +378,7 @@ def attention(x, ch, scope='attention'):
 
         gamma = tf.cast(gamma, x.dtype)
         o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
-        if res_log > 5:
+        if res_log < 8:
             print("Upsampling x {} fact {}".format(o.shape, fact))
             o = upscale2d(o, factor=fact)
         x = gamma * o + x
