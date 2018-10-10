@@ -351,14 +351,11 @@ def l2_norm(v, eps=1e-12):
 def attention(x, ch, scope='attention'):
     with tf.variable_scope(scope, reuse=False):
         with tf.variable_scope('f', reuse=False):
-            f = conv2d(
-                x, ch // 8, kernel=1)  # [bs, h, w, c']
+            f = conv2d(x, ch // 8, kernel=1)  # [bs, h, w, c']
         with tf.variable_scope('g', reuse=False):
-            g = conv2d(
-                x, ch // 8, kernel=1)  # [bs, h, w, c']
+            g = conv2d(x, ch // 8, kernel=1)  # [bs, h, w, c']
         with tf.variable_scope('h', reuse=False):
-            h = conv2d(
-                x, ch, kernel=1)  # [bs, h, w, c]
+            h = conv2d(x, ch, kernel=1)  # [bs, h, w, c]
 
         # N = h * w
         s = tf.matmul(
@@ -375,6 +372,10 @@ def attention(x, ch, scope='attention'):
         x = gamma * o + x
 
     return x
+
+
+def hw_flatten(x):
+    return tf.reshape(x, shape=[x.shape[0], -1, x.shape[-1]])
 
 
 #----------------------------------------------------------------------------
@@ -788,8 +789,8 @@ def G_film(
             y = block(x, res)
             img = lambda: upscale2d(torgb(y, res), 2**lod)
             if res > 2:                img = cset(img, (lod_in > lod),
-    lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod),
-                      2 ** lod))
+                           lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod),
+                                             2 ** lod))
             if lod > 0:
                 img = cset(img, (lod_in < lod),
                            lambda: grow(y, res + 1, lod - 1))
