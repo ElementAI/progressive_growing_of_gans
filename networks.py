@@ -381,7 +381,15 @@ def hw_flatten(x):
     print(shape_tensor_r)
     shape_tensor = [tf.shape(x)[0], np.prod(x_shape[2:]), x_shape[1]]
     print(shape_tensor)
-    return tf.reshape(x, shape=shape_tensor)
+    try:
+        x = tf.reshape(x, shape=shape_tensor)
+    except Exception as e:
+        print(e)
+    try:
+        x = tf.reshape(x, shape=shape_tensor_r)
+    except Exception as e:
+        print(e)
+    return x
 
 
 #----------------------------------------------------------------------------
