@@ -350,6 +350,8 @@ def l2_norm(v, eps=1e-12):
 
 def attention(x, ch, scope='attention'):
     with tf.variable_scope(scope, reuse=False):
+        # if ch > 5:
+        #     _x = downscale2d(x, factor=ch)
         with tf.variable_scope('f', reuse=False):
             f = conv2d(x, ch // 8, kernel=1)  # [bs, h, w, c']
         with tf.variable_scope('g', reuse=False):
