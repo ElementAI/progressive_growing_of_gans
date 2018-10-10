@@ -375,6 +375,7 @@ def attention(x, ch, scope='attention'):
 
 
 def hw_flatten(x):
+    print(x)
     x_shape = x.get_shape().as_list()
     print(x_shape)
     shape_tensor_r = tf.TensorShape([x_shape[0], x_shape[1], np.prod(x_shape[2:])])
@@ -394,7 +395,7 @@ def hw_flatten(x):
         x = tf.reshape(x, shape=shape_tensor_r)
     except Exception as e:
         print(e)
-    return x
+    print(x)
 
 
 #----------------------------------------------------------------------------
