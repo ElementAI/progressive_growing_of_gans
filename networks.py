@@ -350,12 +350,15 @@ def l2_norm(v, eps=1e-12):
 
 def attention(x, ch, scope='attention'):
     with tf.variable_scope(scope, reuse=False):
-        f = conv2d(
-            x, ch // 8, kernel=1)  # [bs, h, w, c']
-        g = conv2d(
-            x, ch // 8, kernel=1)  # [bs, h, w, c']
-        h = conv2d(
-            x, ch, kernel=1)  # [bs, h, w, c]
+        with tf.variable_scope('f', reuse=False):
+            f = conv2d(
+                x, ch // 8, kernel=1)  # [bs, h, w, c']
+        with tf.variable_scope('g', reuse=False):
+            g = conv2d(
+                x, ch // 8, kernel=1)  # [bs, h, w, c']
+        with tf.variable_scope('h', reuse=False):
+            h = conv2d(
+                x, ch, kernel=1)  # [bs, h, w, c]
 
         # N = h * w
         s = tf.matmul(
