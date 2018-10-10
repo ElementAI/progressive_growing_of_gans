@@ -384,15 +384,21 @@ def hw_flatten(x):
     print(shape_tensor)
     shape_tensor_n = [x_shape[0], x_shape[1], np.prod(x_shape[2:])]
     try:
+        print("trying numpy")
         x = tf.reshape(x, shape=shape_tensor_n)
+        print("suceeded")
     except Exception as e:
         print(e)
     try:
+        print("Mixed")
         x = tf.reshape(x, shape=shape_tensor)
+        print("suceeded")
     except Exception as e:
         print(e)
     try:
+        print("TensorShape")
         x = tf.reshape(x, shape=shape_tensor_r)
+        print("suceeded")
     except Exception as e:
         print(e)
     print(x)
