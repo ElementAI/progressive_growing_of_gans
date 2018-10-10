@@ -349,12 +349,13 @@ def l2_norm(v, eps=1e-8):
 
 
 def attention(x, ch, scope='attention'):
-    res_log = 8 - np.log2(ch)
+    res_log = 9 - np.log2(ch)
+    print(res_log)
     _x = x
     with tf.variable_scope(scope, reuse=False):
         if res_log > 5:
             fact = 8
-            if res_log != 8:
+            if res_log < 8:
                 fact = 4
             print("Downsampling x {} fact {}".format(x.shape, fact))
             _x = downscale2d(x, factor=fact)
