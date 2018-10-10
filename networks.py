@@ -483,6 +483,8 @@ def G_paper_att(
                                     fmaps=nf(res - 1),
                                     kernel=3,
                                     use_wscale=use_wscale))))
+            print("Res: {}".format(res))
+            print("Nf: {}".format(nf(res - 1)))
             if res < 5:
                 x = attention(x, nf(res - 1))
             return x
