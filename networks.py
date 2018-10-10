@@ -377,7 +377,7 @@ def attention(x, ch, scope='attention'):
 def hw_flatten(x):
     x_shape = x.get_shape().as_list()
     print(x_shape)
-    shape_tensor = tf.TensorShape([tf.shape(x)[0], np.prod(x_shape[1:]), tf.shape(x)[1]])
+    shape_tensor = tf.TensorShape([x_shape[0], np.prod(x_shape[1:]), x_shape[1]])
     print(shape_tensor)
     shape_tensor = [x_shape[0], np.prod(x_shape[1:]), x_shape[1]]
     print(shape_tensor)
