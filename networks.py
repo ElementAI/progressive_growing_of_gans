@@ -378,7 +378,7 @@ def hw_flatten(x):
     x_shape = x.get_shape().as_list()
     shape_tensor = [tf.shape(x)[0], x_shape[1],  np.prod(x_shape[2:])]
     x = tf.reshape(x, shape=shape_tensor)
-    x = tf.transpose(x, [-1, 1])
+    x = tf.transpose(x, perm=[-1, 1])
     return x
 
 
