@@ -376,7 +376,7 @@ def attention(x, ch, scope='attention'):
 
 def hw_flatten(x):
     x_shape = x.get_shape().as_list()
-    shape_tensor = tf.convert_to_tensor([x_shape[0], -1, x_shape[-1]])
+    shape_tensor = tf.convert_to_tensor(tf.constant([x_shape[0], -1, x_shape[-1]]))
     return tf.reshape(x, shape=shape_tensor)
 
 
