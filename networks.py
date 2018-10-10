@@ -354,8 +354,10 @@ def attention(x, ch, scope='attention'):
     _x = x
     with tf.variable_scope(scope, reuse=False):
         if res_log < 8:
-            fact = 4
-            if res_log <= 3:
+            fact = 2
+            if res_log < 7:
+                fact = 4
+            if res_log <= 4:
                 fact = 8
             print("Downsampling x {} fact {}".format(x.shape, fact))
             _x = downscale2d(x, factor=fact)
