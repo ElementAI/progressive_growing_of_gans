@@ -350,16 +350,18 @@ def l2_norm(v, eps=1e-8):
 
 def attention(x, ch, scope='attention'):
     res_log = np.log2(ch)
-    print(res_log)
+    # print(res_log)
     _x = x
     with tf.variable_scope(scope, reuse=False):
-        if res_log < 8:
+        if res_log < 9:
             fact = 2
-            if res_log < 7:
+            if res_log < 8:
                 fact = 4
-            if res_log <= 4:
+            if res_log < 7:
                 fact = 8
-            print("Downsampling x {} fact {}".format(x.shape, fact))
+            if res_log <= 4:
+                fact = 16
+            # print("Downsampling x {} fact {}".format(x.shape, fact))
             _x = downscale2d(x, factor=fact)
         with tf.variable_scope('f', reuse=False):
             f = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
@@ -381,7 +383,7 @@ def attention(x, ch, scope='attention'):
         gamma = tf.cast(gamma, x.dtype)
         o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
         if res_log < 8:
-            print("Upsampling x {} fact {}".format(o.shape, fact))
+            # print("Upsampling x {} fact {}".format(o.shape, fact))
             o = upscale2d(o, factor=fact)
         x = gamma * o + x
 
@@ -497,8 +499,8 @@ def G_paper_att(
                                     fmaps=nf(res - 1),
                                     kernel=3,
                                     use_wscale=use_wscale))))
-            print("Res: {}".format(res))
-            print("Nf: {}".format(nf(res - 1)))
+            # print("Res: {}".format(res))
+            # print("Nf: {}".format(nf(res - 1)))
             x = attention(x, nf(res - 1))
             return x
 
