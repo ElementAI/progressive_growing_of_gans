@@ -344,20 +344,25 @@ def spectral_norm(w, iteration=1):
     return w_norm
 
 
-def l2_norm(v, eps=1e-12):
+def l2_norm(v, eps=1e-8):
     return v / (tf.reduce_sum(v**2)**0.5 + eps)
 
 
 def attention(x, ch, scope='attention'):
+    res_log = np.log2(ch)
+    _x = x
     with tf.variable_scope(scope, reuse=False):
-        # if ch > 5:
-        #     _x = downscale2d(x, factor=ch)
+        if res_log > 5:
+            fact = 8
+            if res_log != 8:
+                fact = 4
+            _x = downscale2d(x, factor=fact)
         with tf.variable_scope('f', reuse=False):
-            f = conv2d(x, ch // 8, kernel=1)  # [bs, h, w, c']
+            f = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
         with tf.variable_scope('g', reuse=False):
-            g = conv2d(x, ch // 8, kernel=1)  # [bs, h, w, c']
+            g = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
         with tf.variable_scope('h', reuse=False):
-            h = conv2d(x, ch, kernel=1)  # [bs, h, w, c]
+            h = conv2d(_x, ch, kernel=1)  # [bs, h, w, c]
 
         # N = h * w
         s = tf.matmul(
@@ -371,6 +376,8 @@ def attention(x, ch, scope='attention'):
 
         gamma = tf.cast(gamma, x.dtype)
         o = tf.reshape(o, shape=tf.shape(x))  # [bs, h, w, C]
+        if res_log > 5:
+            o = upscale2d(o, factor=fact)
         x = gamma * o + x
 
     return x
