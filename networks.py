@@ -319,7 +319,7 @@ def spectral_norm(w, iteration=1):
     u = tf.get_variable(
         "u", [1, w_shape[-1]],
         initializer=tf.truncated_normal_initializer(),
-        trainable=False)
+        trainable=True)
 
     u = tf.cast(u, w.dtype)
     u_hat = u
@@ -338,7 +338,7 @@ def spectral_norm(w, iteration=1):
     sigma = tf.matmul(tf.matmul(v_hat, w), tf.transpose(u_hat))
     w_norm = w / sigma
 
-    with tf.control_dependencies([u.assign(u_hat)]):
+    with tf.control_dependencies([tf.assign(u, u_hat)]):
         w_norm = tf.reshape(w_norm, w_shape)
 
     return w_norm
