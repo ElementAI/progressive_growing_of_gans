@@ -349,7 +349,7 @@ def l2_norm(v, eps=1e-12):
 
 
 def attention(x, ch, scope='attention'):
-    with tf.variable_scope(scope, reuse=reuse):
+    with tf.variable_scope(scope):
         f = conv2d(
             x, ch // 8, kernel=1)  # [bs, h, w, c']
         g = conv2d(
