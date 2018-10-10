@@ -368,7 +368,7 @@ def attention(x, ch, scope='attention'):
             "gamma", [1], initializer=tf.constant_initializer(0.0))
 
         gamma = tf.cast(gamma, x.dtype)
-        o = tf.reshape(o, shape=x.shape)  # [bs, h, w, C]
+        o = tf.reshape(o, shape=tf.shape(x))  # [bs, h, w, C]
         x = gamma * o + x
 
     return x
