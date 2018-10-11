@@ -345,7 +345,7 @@ def spectral_norm(w, iteration=1, epsilon=1e-8):
 
 
 def l2_norm(v, epsilon=1e-8):
-    return v / (tf.reduce_sum(v**2)**0.5 + eps)
+    return v / (tf.reduce_sum(v**2)**0.5 + epsilon)
 
 
 def attention(x, ch, scope='attention', epsilon=1e-8):
