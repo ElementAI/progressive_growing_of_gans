@@ -53,11 +53,11 @@ def get_weight(shape,
 # Fully-connected layer.
 
 
-def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False):
+def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     if len(x.shape) > 2:
         x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
     w = get_weight([x.shape[1].value, fmaps], gain=gain, use_wscale=use_wscale)
-    w = spectral_norm(w)
+    w = spectral_norm(w, epsilon=epsilon)
     w = tf.cast(w, x.dtype)
     return tf.matmul(x, w)
 
@@ -66,13 +66,13 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False):
 # Convolutional layer.
 
 
-def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
+def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
     w = get_weight(
         [kernel, kernel, x.shape[1].value, fmaps],
         gain=gain,
         use_wscale=use_wscale)
-    w = spectral_norm(w)
+    w = spectral_norm(w, epsilon=epsilon)
     w = tf.cast(w, x.dtype)
     return tf.nn.conv2d(
         x, w, strides=[1, 1, 1, 1], padding='SAME', data_format='NCHW')
@@ -155,10 +155,10 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
 # Function to transform condition, e.g. labels or text embedding before feeding into film layers
 
 
-def embed_condition(x, fmaps):
+def embed_condition(x, fmaps, epsilon=1e-8):
 
     with tf.variable_scope('TextEmbedding'):
-        x = dense(x, 2 * fmaps)
+        x = dense(x, 2 * fmaps, epsilon=epsilon)
         x = apply_bias(x)
         x = leaky_relu(x)
         mu = x[:, :fmaps]
@@ -166,9 +166,9 @@ def embed_condition(x, fmaps):
 
         embedding_kl_loss = KL_loss(mu, log_sigma)
 
-        epsilon = tf.truncated_normal(tf.shape(mu))
+        eps = tf.truncated_normal(tf.shape(mu))
         stddev = tf.exp(log_sigma)
-        text_embed = mu + stddev * epsilon
+        text_embed = mu + stddev * eps
 
     return text_embed, embedding_kl_loss
 
@@ -226,7 +226,7 @@ def upscale2d(x, factor=2):
 # Faster and uses less memory than performing the operations separately.
 
 
-def upscale2d_conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
+def upscale2d_conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
     w = get_weight(
         [kernel, kernel, fmaps, x.shape[1].value],
@@ -236,7 +236,7 @@ def upscale2d_conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
     w = tf.pad(w, [[1, 1], [1, 1], [0, 0], [0, 0]], mode='CONSTANT')
     w = tf.add_n([w[1:, 1:], w[:-1, 1:], w[1:, :-1], w[:-1, :-1]])
     w = tf.cast(w, x.dtype)
-    w = spectral_norm(w)
+    w = spectral_norm(w, epsilon=epsilon)
     os = [tf.shape(x)[0], fmaps, x.shape[2] * 2, x.shape[3] * 2]
     return tf.nn.conv2d_transpose(
         x, w, os, strides=[1, 1, 2, 2], padding='SAME', data_format='NCHW')
@@ -261,7 +261,7 @@ def downscale2d(x, factor=2):
 # Faster and uses less memory than performing the operations separately.
 
 
-def conv2d_downscale2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
+def conv2d_downscale2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
     w = get_weight(
         [kernel, kernel, x.shape[1].value, fmaps],
@@ -269,7 +269,7 @@ def conv2d_downscale2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
         use_wscale=use_wscale)
     w = tf.pad(w, [[1, 1], [1, 1], [0, 0], [0, 0]], mode='CONSTANT')
     w = tf.add_n([w[1:, 1:], w[:-1, 1:], w[1:, :-1], w[:-1, :-1]]) * 0.25
-    w = spectral_norm(w)
+    w = spectral_norm(w, epsilon=epsilon)
     w = tf.cast(w, x.dtype)
     return tf.nn.conv2d(
         x, w, strides=[1, 1, 2, 2], padding='SAME', data_format='NCHW')
@@ -312,7 +312,7 @@ def minibatch_stddev_layer(x, group_size=4):
         return tf.concat([x, y], axis=1)  # [NCHW]  Append as new fmap.
 
 
-def spectral_norm(w, iteration=1):
+def spectral_norm(w, iteration=1, epsilon=1e-8):
     w_shape = w.shape.as_list()
     w = tf.reshape(w, [-1, w_shape[-1]])
 
@@ -330,10 +330,10 @@ def spectral_norm(w, iteration=1):
         Usually iteration = 1 will be enough
         """
         v_ = tf.matmul(u_hat, tf.transpose(w))
-        v_hat = l2_norm(v_)
+        v_hat = l2_norm(v_, epsilon=epsilon)
 
         u_ = tf.matmul(v_hat, w)
-        u_hat = l2_norm(u_)
+        u_hat = l2_norm(u_, epsilon=epsilon)
 
     sigma = tf.matmul(tf.matmul(v_hat, w), tf.transpose(u_hat))
     w_norm = w / sigma
@@ -344,11 +344,11 @@ def spectral_norm(w, iteration=1):
     return w_norm
 
 
-def l2_norm(v, eps=1e-8):
+def l2_norm(v, epsilon=1e-8):
     return v / (tf.reduce_sum(v**2)**0.5 + eps)
 
 
-def attention(x, ch, scope='attention'):
+def attention(x, ch, scope='attention', epsilon=1e-8):
     res_log = np.log2(ch)
     # print(res_log)
     _x = x
@@ -364,11 +364,11 @@ def attention(x, ch, scope='attention'):
             # print("Downsampling x {} fact {}".format(x.shape, fact))
             _x = downscale2d(x, factor=fact)
         with tf.variable_scope('f', reuse=False):
-            f = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
+            f = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
         with tf.variable_scope('g', reuse=False):
-            g = conv2d(_x, ch // 8, kernel=1)  # [bs, h, w, c']
+            g = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
         with tf.variable_scope('h', reuse=False):
-            h = conv2d(_x, ch, kernel=1)  # [bs, h, w, c]
+            h = conv2d(_x, ch, kernel=1, epsilon=epsilon)  # [bs, h, w, c]
 
         # N = h * w
         s = tf.matmul(
@@ -382,7 +382,7 @@ def attention(x, ch, scope='attention'):
 
         gamma = tf.cast(gamma, x.dtype)
         o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
-        if res_log < 8:
+        if res_log < 9:
             # print("Upsampling x {} fact {}".format(o.shape, fact))
             o = upscale2d(o, factor=fact)
         x = gamma * o + x
@@ -455,7 +455,8 @@ def G_paper_att(
                         x,
                         fmaps=nf(res - 1) * 16,
                         gain=np.sqrt(2) / 4,
-                        use_wscale=use_wscale
+                        use_wscale=use_wscale,
+                        epsilon=pixelnorm_epsilon
                     )  # override gain to match the original Theano implementation
                     x = tf.reshape(x, [-1, nf(res - 1), 4, 4])
                     x = PN(act(apply_bias(x)))
@@ -467,7 +468,8 @@ def G_paper_att(
                                     x,
                                     fmaps=nf(res - 1),
                                     kernel=3,
-                                    use_wscale=use_wscale))))
+                                    use_wscale=use_wscale,
+                                    epsilon=pixelnorm_epsilon))))
             else:  # 8x8 and up
                 if fused_scale:
                     with tf.variable_scope('Conv0_up'):
@@ -478,7 +480,8 @@ def G_paper_att(
                                         x,
                                         fmaps=nf(res - 1),
                                         kernel=3,
-                                        use_wscale=use_wscale))))
+                                        use_wscale=use_wscale,
+                                        epsilon=pixelnorm_epsilon))))
                 else:
                     x = upscale2d(x)
                     with tf.variable_scope('Conv0'):
@@ -489,7 +492,8 @@ def G_paper_att(
                                         x,
                                         fmaps=nf(res - 1),
                                         kernel=3,
-                                        use_wscale=use_wscale))))
+                                        use_wscale=use_wscale,
+                                        epsilon=pixelnorm_epsilon))))
                 with tf.variable_scope('Conv1'):
                     x = PN(
                         act(
@@ -498,7 +502,8 @@ def G_paper_att(
                                     x,
                                     fmaps=nf(res - 1),
                                     kernel=3,
-                                    use_wscale=use_wscale))))
+                                    use_wscale=use_wscale,
+                                    epsilon=pixelnorm_epsilon))))
             # print("Res: {}".format(res))
             # print("Nf: {}".format(nf(res - 1)))
             x = attention(x, nf(res - 1))
@@ -513,7 +518,8 @@ def G_paper_att(
                     fmaps=num_channels,
                     kernel=1,
                     gain=1,
-                    use_wscale=use_wscale))
+                    use_wscale=use_wscale,
+                    epsilon=pixelnorm_epsilon))
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
@@ -564,6 +570,7 @@ def D_paper(
         fused_scale=True,  # True = use fused conv2d + downscale2d, False = separate downscale2d layers.
         structure=None,  # 'linear' = human-readable, 'recursive' = efficient, None = select automatically
         is_template_graph=False,  # True = template graph constructed by the Network class, False = actual evaluation.
+        epsilon=1e-8,
         **kwargs):  # Ignore unrecognized keyword args.
 
     resolution_log2 = int(np.log2(resolution))
@@ -589,7 +596,8 @@ def D_paper(
                 apply_bias(
                     conv2d(
                         x, fmaps=nf(res - 1), kernel=1,
-                        use_wscale=use_wscale)))
+                        use_wscale=use_wscale,
+                        epsilon=epsilon)))
 
     def block(x, res):  # res = 2..resolution_log2
         with tf.variable_scope('%dx%d' % (2**res, 2**res)):
@@ -601,7 +609,8 @@ def D_paper(
                                 x,
                                 fmaps=nf(res - 1),
                                 kernel=3,
-                                use_wscale=use_wscale)))
+                                use_wscale=use_wscale,
+                                epsilon=epsilon)))
                 if fused_scale:
                     with tf.variable_scope('Conv1_down'):
                         x = act(
@@ -610,7 +619,8 @@ def D_paper(
                                     x,
                                     fmaps=nf(res - 2),
                                     kernel=3,
-                                    use_wscale=use_wscale)))
+                                    use_wscale=use_wscale,
+                                    epsilon=epsilon)))
                 else:
                     with tf.variable_scope('Conv1'):
                         x = act(
@@ -619,7 +629,8 @@ def D_paper(
                                     x,
                                     fmaps=nf(res - 2),
                                     kernel=3,
-                                    use_wscale=use_wscale)))
+                                    use_wscale=use_wscale,
+                                    epsilon=epsilon)))
                     x = downscale2d(x)
             else:  # 4x4
                 if mbstd_group_size > 1:
@@ -631,19 +642,22 @@ def D_paper(
                                 x,
                                 fmaps=nf(res - 1),
                                 kernel=3,
-                                use_wscale=use_wscale)))
+                                use_wscale=use_wscale,
+                                epsilon=epsilon)))
                 with tf.variable_scope('Dense0'):
                     x = act(
                         apply_bias(
                             dense(x, fmaps=nf(res - 2),
-                                  use_wscale=use_wscale)))
+                                  use_wscale=use_wscale,
+                                  epsilon=epsilon)))
                 with tf.variable_scope('Dense1'):
                     x = apply_bias(
                         dense(
                             x,
                             fmaps=1 + label_size,
                             gain=1,
-                            use_wscale=use_wscale))
+                            use_wscale=use_wscale,
+                            epsilon=epsilon))
             return x
 
     # Linear structure: simple but inefficient.
