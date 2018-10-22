@@ -1,0 +1,10 @@
+FROM nvcr.io/nvidia/tensorflow:18.09
+
+RUN mkdir /src
+WORKDIR /src
+COPY . /src
+
+RUN pip install requirements-pip.txt
+RUN pip install responder
+
+CMD ["python", "api.py"]

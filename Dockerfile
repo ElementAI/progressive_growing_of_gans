@@ -1,5 +1,5 @@
-FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
-
+# FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+FROM nvcr.io/nvidia/tensorflow:18.09
 MAINTAINER Thomas Boquet <thomas.boquet@hec.ca>
 
 RUN apt-get update --fix-missing && apt-get install -y wget bzip2 ca-certificates \
