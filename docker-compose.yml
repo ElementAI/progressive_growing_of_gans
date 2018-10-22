@@ -17,7 +17,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     environment:
-      - MODEL_PATH: ${MODEL_PATH}
+      MODEL_PATH: ${MODEL_PATH}
     volumes:
       - /mnt/scratch/ssense/models_t_shirts/:/models
     ports:
