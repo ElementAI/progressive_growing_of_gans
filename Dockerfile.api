@@ -1,5 +1,5 @@
-FROM nvcr.io/nvidia/tensorflow:18.09
-
+# FROM nvcr.io/nvidia/tensorflow:18.09
+FROM tensorflow/tensorflow:nightly-devel-gpu-py3
 RUN mkdir /src
 WORKDIR /src
 COPY . /src
