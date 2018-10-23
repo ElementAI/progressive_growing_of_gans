@@ -23,5 +23,3 @@ services:
       - /mnt/home/thomas/models_t_shirts/:/models
     ports:
       - "6000:6000"
-    build:
-      context: .
