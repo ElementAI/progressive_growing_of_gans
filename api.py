@@ -19,6 +19,7 @@ api = Flask(__name__)
 def load_model(path):
     with open(path, 'rb') as file:
         G, D, Gs = pickle.load(file)
+    return G, D, Gs
 
 
 # Initialize TensorFlow session.
