@@ -20,7 +20,7 @@ def load_model(path):
         G, D, Gs = pickle.load(file)
 
 
-_, _, model = load_model(os.path.get("MODEL_PATH"))
+_, _, model = load_model(os.environ.get("MODEL_PATH"))
 
 
 @api.route("/healthcheck")
