@@ -10,6 +10,7 @@ from flask import request
 from flask import send_file
 import numpy as np
 import PIL
+import tensorflow as tf
 
 
 api = Flask(__name__)
@@ -18,6 +19,10 @@ api = Flask(__name__)
 def load_model(path):
     with open(path, 'rb') as file:
         G, D, Gs = pickle.load(file)
+
+
+# Initialize TensorFlow session.
+tf.InteractiveSession()
 
 
 _, _, model = load_model(os.environ.get("MODEL_PATH"))
