@@ -57,5 +57,5 @@ def predict():
         attachment_filename='prediction.png'), 200
 
 
-if __name__ == ['__main__']:
+if __name__ == '__main__':
     api.run(debug=True)
