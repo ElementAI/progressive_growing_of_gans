@@ -5,6 +5,6 @@ WORKDIR /src
 COPY . /src
 
 RUN pip install requirements-pip.txt
-RUN pip install responder
+RUN pip install flask
 
 CMD ["python", "api.py"]
