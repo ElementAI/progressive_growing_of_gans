@@ -131,12 +131,12 @@ class TrainingSchedule:
 # To run, comment/uncomment appropriate lines in config.py and launch train.py.
 
 def train_progressive_gan(
-    G_smoothing             = 0.999,        # Exponential running average of generator weights.
-    D_repeats               = 1,            # How many times the discriminator is trained per G iteration.
+    G_smoothing             = 0.9999,        # Exponential running average of generator weights.
+    D_repeats               = 2,            # How many times the discriminator is trained per G iteration.
     minibatch_repeats       = 4,            # Number of minibatches to run before adjusting training parameters.
     reset_opt_for_new_lod   = True,         # Reset optimizer internal state (e.g. Adam moments) when new layers are introduced?
     total_kimg              = 15000,        # Total length of the training, measured in thousands of real images.
-    mirror_augment          = False,        # Enable mirror augment?
+    mirror_augment          = True,        # Enable mirror augment?
     drange_net              = [-1,1],       # Dynamic range used when feeding image data to the networks.
     image_snapshot_ticks    = 1,            # How often to export image snapshots?
     network_snapshot_ticks  = 10,           # How often to export network snapshots?

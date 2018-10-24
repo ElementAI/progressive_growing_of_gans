@@ -350,44 +350,44 @@ def l2_norm(v, epsilon=1e-8):
 
 def attention(x, ch, scope='attention', epsilon=1e-8):
     res_log = np.log2(ch)
-    # print(res_log)
-    _x = x
-    with tf.variable_scope(scope, reuse=False):
-        if res_log < 9:
-            fact = 2
+    if res_log > 5:
+        _x = x
+        with tf.variable_scope(scope, reuse=False):
             if res_log < 8:
-                fact = 4
-            if res_log < 7:
-                fact = 8
-            if res_log <= 4:
-                fact = 16
-            # print("Downsampling x {} fact {}".format(x.shape, fact))
-            _x = downscale2d(x, factor=fact)
-        with tf.variable_scope('f', reuse=False):
-            f = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
-        with tf.variable_scope('g', reuse=False):
-            g = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
-        with tf.variable_scope('h', reuse=False):
-            h = conv2d(_x, ch, kernel=1, epsilon=epsilon)  # [bs, h, w, c]
+                fact = 2
+                if res_log < 7:
+                    fact = 4
+                if res_log < 6:
+                    fact = 4
+                if res_log <= 5:
+                    fact = 8
+                # print("Downsampling x {} fact {}".format(x.shape, fact))
+                _x = downscale2d(x, factor=fact)
+            with tf.variable_scope('f', reuse=False):
+                f = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
+            with tf.variable_scope('g', reuse=False):
+                g = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
+            with tf.variable_scope('h', reuse=False):
+                h = conv2d(_x, ch, kernel=1, epsilon=epsilon)  # [bs, h, w, c]
 
-        # N = h * w
-        s = tf.matmul(
-            hw_flatten(g), hw_flatten(f), transpose_b=True)  # # [bs, N, N]
+            # N = h * w
+            s = tf.matmul(
+                hw_flatten(g), hw_flatten(f), transpose_b=True)  # # [bs, N, N]
 
-        beta = tf.nn.softmax(s, axis=-1)  # attention map
+            beta = tf.nn.softmax(s, axis=-1)  # attention map
 
-        o = tf.matmul(beta, hw_flatten(h))  # [bs, N, C]
-        gamma = tf.get_variable(
-            "gamma", [1], initializer=tf.constant_initializer(0.0))
+            o = tf.matmul(beta, hw_flatten(h))  # [bs, N, C]
+            gamma = tf.get_variable(
+                "gamma", [1], initializer=tf.constant_initializer(0.0))
 
-        gamma = tf.cast(gamma, x.dtype)
-        o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
-        if res_log < 9:
-            # print("Upsampling x {} fact {}".format(o.shape, fact))
-            o = upscale2d(o, factor=fact)
-        x = gamma * o + x
+            gamma = tf.cast(gamma, x.dtype)
+            o = tf.reshape(o, shape=tf.shape(_x))  # [bs, h, w, C]
+            if res_log < 9:
+                # print("Upsampling x {} fact {}".format(o.shape, fact))
+                o = upscale2d(o, factor=fact)
+            x = gamma * o + x
 
-    return x
+        return x
 
 
 def hw_flatten(x):
