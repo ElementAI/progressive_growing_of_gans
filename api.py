@@ -53,6 +53,8 @@ def predict():
         data = data['data']
 
     data = np.array([data])
+    print(model)
+    print(data)
     if data.shape[1] != model.input_shape[0][1]:
         abort(403)
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
