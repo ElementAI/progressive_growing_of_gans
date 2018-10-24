@@ -17,9 +17,10 @@ api = Flask(__name__)
 
 
 def load_model(path):
-    with open(path, 'rb') as file:
-        G, D, Gs = pickle.load(file)
-    return G, D, Gs
+    with sess.as_default():
+        with open(path, 'rb') as file:
+            G, D, Gs = pickle.load(file)
+        return G, D, Gs
 
 
 # Initialize TensorFlow session.
@@ -63,7 +64,8 @@ def predict():
         abort(403)
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
 
-    images = model.run(data, labels)
+    with sess.as_default():
+        images = model.run(data, labels)
 
     # Convert array to Image
     img = PIL.Image.fromarray(images[0])
