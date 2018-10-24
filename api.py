@@ -44,8 +44,10 @@ def predict():
 
     data = request.get_json()
     if data is None:
+        print("no data")
         abort(404)
     if 'data' not in data:
+        print("data not in data")
         abort(404)
     else:
         data = data['data']
