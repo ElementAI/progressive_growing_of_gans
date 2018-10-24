@@ -24,8 +24,10 @@ def load_model(path):
 
 # Initialize TensorFlow session.
 # tf.InteractiveSession()
+sess = tf.Session()
 
-_, _, model = load_model(os.environ.get("MODEL_PATH"))
+with sess.as_default():
+    _, _, model = load_model(os.environ.get("MODEL_PATH"))
 
 
 @api.route("/healthcheck")
@@ -40,7 +42,6 @@ def config():
 
 @api.route("/predict", methods=['POST'])
 def predict():
-    sess = tf.Session()
     data = request.get_json()
     if data is None:
         print("no data")
