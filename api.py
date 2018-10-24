@@ -61,6 +61,7 @@ def predict():
         abort(403)
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
 
+    print(labels.shape)
     images = model.run(data, labels)
 
     # Convert array to Image
