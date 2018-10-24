@@ -39,8 +39,8 @@ def config():
     return jsonify({'input_shape': model.input_shapes[0]})
 
 
-@api.route("/predict")
-def predict(methods=['POST']):
+@api.route("/predict", methods=['POST'])
+def predict():
 
     data = request.get_json()
     if data is None:
