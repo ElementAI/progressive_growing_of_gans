@@ -40,7 +40,7 @@ def config():
 
 
 @api.route("/predict")
-def predict(method=['POST']):
+def predict(methods=['POST']):
 
     data = request.get_json()
     if data is None:
