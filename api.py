@@ -67,7 +67,8 @@ def predict():
     with sess.as_default():
         with sess.graph.as_default():
             images = model.run(data, labels)
-
+    images = np.clip(np.rint((images + 1.0) / 2.0 * 255.0), 0.0, 255.0).astype(np.uint8) # [-1,1] => [0,255]
+    images = images.transpose(0, 2, 3, 1)
     print(images.shape)
     # Convert array to Image
     img = PIL.Image.fromarray(images[0])
