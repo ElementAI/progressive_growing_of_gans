@@ -23,7 +23,9 @@ def load_model(path):
 
 
 # Initialize TensorFlow session.
-tf.InteractiveSession()
+# tf.InteractiveSession()
+sess = tf.Session()
+sess.as_default()
 
 
 _, _, model = load_model(os.environ.get("MODEL_PATH"))
