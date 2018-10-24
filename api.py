@@ -72,8 +72,10 @@ def predict():
     print(images.shape)
     # Convert array to Image
     img = PIL.Image.fromarray(images[0])
+    b_array = io.BytesIO()
+    img.save(b_array, format='PNG')
     return send_file(
-        io.BytesIO(img),
+        b_array.get_value(),
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='prediction.png'), 200
