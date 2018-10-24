@@ -8,12 +8,14 @@ from flask import Flask
 from flask import jsonify
 from flask import request
 from flask import send_file
+from flask_cors import CORS
 import numpy as np
 import PIL
 import tensorflow as tf
 
 
 api = Flask(__name__)
+CORS(api)
 
 
 def load_model(path):
@@ -23,7 +25,7 @@ def load_model(path):
 
 
 # Initialize TensorFlow session.
-tf.InteractiveSession()
+# tf.InteractiveSession()
 sess = tf.Session()
 
 with sess.as_default():
