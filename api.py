@@ -68,6 +68,7 @@ def predict():
         with sess.graph.as_default():
             images = model.run(data, labels)
 
+    print(images.shape)
     # Convert array to Image
     img = PIL.Image.fromarray(images[0])
     return send_file(
