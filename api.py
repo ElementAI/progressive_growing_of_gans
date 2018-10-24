@@ -36,24 +36,23 @@ def healthcheck():
 
 @api.route("/config")
 def config():
-    print(model.input_shapes)
     return jsonify({'input_shape': model.input_shapes[0]})
 
 
 @api.route("/predict")
-def predict():
+def predict(method=['POST']):
 
     data = request.get_json()
     if data is None:
         abort(404)
-        # randn(1000, *Gs.input_shapes[0][1:])
-        # data = np.random.normal()
     if 'data' not in data:
         abort(404)
     else:
         data = data['data']
 
     data = np.array([data])
+    if data.shape[1] != model.input_shape[0][1]:
+        abort(403)
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
 
     images = model.run(data, labels)
