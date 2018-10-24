@@ -5,7 +5,7 @@ COPY . /src
 
 RUN pip install -r requirements-pip.txt
 RUN pip install flask flask-cors
-RUN git clone git@github.com:jiny2001/dcscn-super-resolution.git
+RUN git clone https://github.com/jiny2001/dcscn-super-resolution.git
 
 
 CMD ["python", "api.py"]

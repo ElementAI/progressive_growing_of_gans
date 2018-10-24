@@ -28,6 +28,7 @@ def load_model(path):
 # tf.InteractiveSession()
 sess = tf.Session()
 
+
 with sess.as_default():
     with sess.graph.as_default():
         _, _, model = load_model(os.environ.get("MODEL_PATH"))
