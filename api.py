@@ -24,10 +24,8 @@ def load_model(path):
 
 # Initialize TensorFlow session.
 # tf.InteractiveSession()
-sess = tf.Session()
 
-with sess.as_default():
-    _, _, model = load_model(os.environ.get("MODEL_PATH"))
+# _, _, model = load_model(os.environ.get("MODEL_PATH"))
 
 
 @api.route("/healthcheck")
@@ -42,6 +40,7 @@ def config():
 
 @api.route("/predict", methods=['POST'])
 def predict():
+
     data = request.get_json()
     if data is None:
         print("no data")
@@ -51,18 +50,20 @@ def predict():
         abort(404)
     else:
         data = data['data']
+    with tf.InteractiveSession():
 
-    data = np.array([data])
-    print(model)
-    print(data)
-    print(data.shape)
-    print(model.input_shapes)
-    if data.shape[1] != model.input_shapes[0][1]:
-        abort(403)
-    labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
+        _, _, model = load_model(os.environ.get("MODEL_PATH"))
 
-    print(labels.shape)
-    with sess.as_default():
+        data = np.array([data])
+        print(model)
+        print(data)
+        print(data.shape)
+        print(model.input_shapes)
+        if data.shape[1] != model.input_shapes[0][1]:
+            abort(403)
+        labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
+
+        print(labels.shape)
         images = model.run(data, labels)
 
     # Convert array to Image
