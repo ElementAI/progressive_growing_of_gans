@@ -75,7 +75,7 @@ def predict():
     b_array = io.BytesIO()
     img.save(b_array, format='PNG')
     return send_file(
-        b_array.get_value(),
+        b_array.getvalue(),
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='prediction.png'), 200
