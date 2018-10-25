@@ -854,6 +854,7 @@ def G_film(
                 text_embed=text_embed,
                 weight_decay_film=weight_decay_film,
                 **kwargs)
+            print("after block before to rgb")
             print(x)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
