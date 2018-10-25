@@ -836,7 +836,12 @@ def G_film(
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
             lod = resolution_log2 - res
-            x = block(x, res, text_embed=text_embed, **kwargs)
+            x = block(
+                x,
+                res,
+                text_embed=text_embed,
+                weight_decay_film=weight_decay_film,
+                **kwargs)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
             with tf.variable_scope('Grow_lod%d' % lod):
@@ -846,7 +851,11 @@ def G_film(
     if structure == 'recursive':
 
         def grow(x, res, lod):
-            y = block(x, res)
+            y = block(
+                x,
+                res,
+                text_embed=text_embed,
+                weight_decay_film=weight_decay_film)
             img = lambda: upscale2d(torgb(y, res), 2**lod)
             if res > 2:                img = cset(img, (lod_in > lod),
     lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod),
