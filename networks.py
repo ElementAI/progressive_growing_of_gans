@@ -68,6 +68,8 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
 
 def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
+    print("in conv2d")
+    print(x)
     w = get_weight(
         [kernel, kernel, x.shape[1].value, fmaps],
         gain=gain,
@@ -814,6 +816,8 @@ def G_film(
     def torgb(x, res):  # res = 2..resolution_log2
         lod = resolution_log2 - res
         with tf.variable_scope('ToRGB_lod%d' % lod):
+            print("in torgb")
+            print(x)
             return apply_bias(
                 conv2d(
                     x,
