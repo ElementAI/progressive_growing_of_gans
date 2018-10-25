@@ -68,8 +68,6 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
 
 def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
-    print("in conv2d")
-    print(x)
     w = get_weight(
         [kernel, kernel, x.shape[1].value, fmaps],
         gain=gain,
@@ -401,7 +399,7 @@ def attention(x, ch, scope='attention', epsilon=1e-8):
                 o = upscale2d(o, factor=fact)
             x = gamma * o + x
 
-        return x
+    return x
 
 
 def hw_flatten(x):
@@ -803,26 +801,17 @@ def G_film(
                         x = apply_film(x, text_embed, weight_decay_film)
                         x = PN(act(x))
                 with tf.variable_scope('Conv1'):
-                    print("Before conv2d")
-                    print(x)
                     x = conv2d(
                         x, fmaps=nf(res - 1), kernel=3, use_wscale=use_wscale)
-                    print("Before apply film")
-                    print(x)
                     x = apply_film(x, text_embed, weight_decay_film)
-                    print(x)
                     x = PN(act(x))
-            print("Before attention: {}".format(x))
             if nf(res - 1) > 7:
                 x = attention(x, nf(res - 1))
-            print("before return block {}: {}".format(res, x))
             return x
 
     def torgb(x, res):  # res = 2..resolution_log2
         lod = resolution_log2 - res
         with tf.variable_scope('ToRGB_lod%d' % lod):
-            print("in torgb")
-            print(x)
             return apply_bias(
                 conv2d(
                     x,
@@ -846,9 +835,6 @@ def G_film(
             **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
-            print("RESOLUTION {}".format(res))
-            print("Before last blocks")
-            print(x)
             lod = resolution_log2 - res
             x = block(
                 x,
@@ -856,8 +842,6 @@ def G_film(
                 text_embed=text_embed,
                 weight_decay_film=weight_decay_film,
                 **kwargs)
-            print("after block before to rgb")
-            print(x)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
             with tf.variable_scope('Grow_lod%d' % lod):
