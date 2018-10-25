@@ -803,7 +803,9 @@ def G_film(
                 with tf.variable_scope('Conv1'):
                     x = conv2d(
                         x, fmaps=nf(res - 1), kernel=3, use_wscale=use_wscale)
+                    print(x)
                     x = apply_film(x, text_embed, weight_decay_film)
+                    print(x)
                     x = PN(act(x))
             if nf(res - 1) > 7:
                 x = attention(x, nf(res - 1))
