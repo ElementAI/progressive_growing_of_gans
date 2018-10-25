@@ -226,7 +226,12 @@ def upscale2d(x, factor=2):
 # Faster and uses less memory than performing the operations separately.
 
 
-def upscale2d_conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
+def upscale2d_conv2d(x,
+                     fmaps,
+                     kernel,
+                     gain=np.sqrt(2),
+                     use_wscale=False,
+                     epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
     w = get_weight(
         [kernel, kernel, fmaps, x.shape[1].value],
@@ -261,7 +266,12 @@ def downscale2d(x, factor=2):
 # Faster and uses less memory than performing the operations separately.
 
 
-def conv2d_downscale2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False, epsilon=1e-8):
+def conv2d_downscale2d(x,
+                       fmaps,
+                       kernel,
+                       gain=np.sqrt(2),
+                       use_wscale=False,
+                       epsilon=1e-8):
     assert kernel >= 1 and kernel % 2 == 1
     w = get_weight(
         [kernel, kernel, x.shape[1].value, fmaps],
@@ -364,9 +374,11 @@ def attention(x, ch, scope='attention', epsilon=1e-8):
                 # print("Downsampling x {} fact {}".format(x.shape, fact))
                 _x = downscale2d(x, factor=fact)
             with tf.variable_scope('f', reuse=False):
-                f = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
+                f = conv2d(
+                    _x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
             with tf.variable_scope('g', reuse=False):
-                g = conv2d(_x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
+                g = conv2d(
+                    _x, ch // 8, kernel=1, epsilon=epsilon)  # [bs, h, w, c']
             with tf.variable_scope('h', reuse=False):
                 h = conv2d(_x, ch, kernel=1, epsilon=epsilon)  # [bs, h, w, c]
 
@@ -392,7 +404,7 @@ def attention(x, ch, scope='attention', epsilon=1e-8):
 
 def hw_flatten(x):
     x_shape = x.get_shape().as_list()
-    shape_tensor = [tf.shape(x)[0], x_shape[1],  np.prod(x_shape[2:])]
+    shape_tensor = [tf.shape(x)[0], x_shape[1], np.prod(x_shape[2:])]
     x = tf.reshape(x, shape=shape_tensor)
     x = tf.transpose(x, perm=[0, 2, 1])
     return x
@@ -595,7 +607,9 @@ def D_paper(
             return act(
                 apply_bias(
                     conv2d(
-                        x, fmaps=nf(res - 1), kernel=1,
+                        x,
+                        fmaps=nf(res - 1),
+                        kernel=1,
                         use_wscale=use_wscale,
                         epsilon=epsilon)))
 
@@ -647,9 +661,11 @@ def D_paper(
                 with tf.variable_scope('Dense0'):
                     x = act(
                         apply_bias(
-                            dense(x, fmaps=nf(res - 2),
-                                  use_wscale=use_wscale,
-                                  epsilon=epsilon)))
+                            dense(
+                                x,
+                                fmaps=nf(res - 2),
+                                use_wscale=use_wscale,
+                                epsilon=epsilon)))
                 with tf.variable_scope('Dense1'):
                     x = apply_bias(
                         dense(
@@ -811,7 +827,12 @@ def G_film(
         tf.add_to_collection(
             name=tf.GraphKeys.REGULARIZATION_LOSSES, value=embedding_kl_loss)
 
-        x = block(combo_in, 2, text_embed=text_embed, weight_decay_film, **kwargs)
+        x = block(
+            combo_in,
+            2,
+            text_embed=text_embed,
+            weight_decay_film=weight_decay_film,
+            **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
             lod = resolution_log2 - res
@@ -828,8 +849,8 @@ def G_film(
             y = block(x, res)
             img = lambda: upscale2d(torgb(y, res), 2**lod)
             if res > 2:                img = cset(img, (lod_in > lod),
-                           lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod),
-                                             2 ** lod))
+    lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod),
+                      2 ** lod))
             if lod > 0:
                 img = cset(img, (lod_in < lod),
                            lambda: grow(y, res + 1, lod - 1))
