@@ -814,6 +814,7 @@ def G_film(
                     x = PN(act(x))
             if nf(res - 1) > 7:
                 x = attention(x, nf(res - 1))
+            print("before return block {}: {}".format(res, x))
             return x
 
     def torgb(x, res):  # res = 2..resolution_log2
