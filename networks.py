@@ -371,7 +371,7 @@ def attention(x, ch, scope='attention', epsilon=1e-8):
                     fact = 4
                 if res_log <= 5:
                     fact = 8
-                # print("Downsampling x {} fact {}".format(x.shape, fact))
+                print("Downsampling x {} fact {}".format(x.shape, fact))
                 _x = downscale2d(x, factor=fact)
             with tf.variable_scope('f', reuse=False):
                 f = conv2d(
