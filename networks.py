@@ -803,8 +803,11 @@ def G_film(
                         x = apply_film(x, text_embed, weight_decay_film)
                         x = PN(act(x))
                 with tf.variable_scope('Conv1'):
+                    print("Before conv2d")
+                    print(x)
                     x = conv2d(
                         x, fmaps=nf(res - 1), kernel=3, use_wscale=use_wscale)
+                    print("Before apply film")
                     print(x)
                     x = apply_film(x, text_embed, weight_decay_film)
                     print(x)
@@ -841,6 +844,8 @@ def G_film(
             **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
+            print("Before last blocks")
+            print(x)
             lod = resolution_log2 - res
             x = block(
                 x,
