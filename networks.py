@@ -812,6 +812,7 @@ def G_film(
                     x = apply_film(x, text_embed, weight_decay_film)
                     print(x)
                     x = PN(act(x))
+            print("Before attention: {}".format(x))
             if nf(res - 1) > 7:
                 x = attention(x, nf(res - 1))
             print("before return block {}: {}".format(res, x))
