@@ -844,6 +844,7 @@ def G_film(
                 text_embed=text_embed,
                 weight_decay_film=weight_decay_film,
                 **kwargs)
+            print(x)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
             with tf.variable_scope('Grow_lod%d' % lod):
