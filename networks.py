@@ -844,6 +844,7 @@ def G_film(
             **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
+            print("RESOLUTION {}".format(res))
             print("Before last blocks")
             print(x)
             lod = resolution_log2 - res
