@@ -360,13 +360,13 @@ def l2_norm(v, epsilon=1e-8):
 
 def attention(x, ch, scope='attention', epsilon=1e-8):
     res_log = np.log2(ch)
-    if res_log > 5:
+    if res_log > 6:
         _x = x
         with tf.variable_scope(scope, reuse=False):
             if res_log < 8:
-                fact = 2
+                fact = 4
                 if res_log < 7:
-                    fact = 4
+                    fact = 8
                 if res_log < 6:
                     fact = 4
                 if res_log <= 5:
