@@ -126,10 +126,10 @@ def apply_film(x, text_embed, weight_decay_film, **kwargs):
 
         beta_postmultiplier, gamma_postmultiplier = get_film_postmultiplier(
             weight_decay_film)
-        gamma_weight = tf.cast(w, x.dtype)
-        beta_weight = tf.cast(w, x.dtype)
-        beta_postmultiplier = tf.cast(w, x.dtype)
-        gamma_postmultiplier = tf.cast(w, x.dtype)
+        gamma_weight = tf.cast(gamma_weight, x.dtype)
+        beta_weight = tf.cast(beta_weight, x.dtype)
+        beta_postmultiplier = tf.cast(beta_postmultiplier, x.dtype)
+        gamma_postmultiplier = tf.cast(gamma_postmultiplier, x.dtype)
         beta_postmultiplier = tfutil.autosummary('Film/beta_0/' + scope,
                                                  beta_postmultiplier)
         gamma_postmultiplier = tfutil.autosummary('Film/gamma_0/' + scope,
@@ -788,6 +788,8 @@ def G_film(
                         x, fmaps=nf(res - 1), kernel=3, use_wscale=use_wscale)
                     x = apply_film(x, text_embed, weight_decay_film)
                     x = PN(act(x))
+            if nf(res - 1) > 7:
+                x = attention(x, nf(res - 1))
             return x
 
     def torgb(x, res):  # res = 2..resolution_log2
