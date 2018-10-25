@@ -713,6 +713,7 @@ def G_film(
         use_pixelnorm=True,  # Enable pixelwise feature vector normalization?
         pixelnorm_epsilon=1e-8,  # Constant epsilon for pixelwise feature vector normalization.
         use_leakyrelu=True,  # True = leaky ReLU, False = ReLU.
+        weight_decay_film=1e-4,
         dtype='float32',  # Data type to use for activations and outputs.
         fused_scale=True,  # True = use fused upscale2d + conv2d, False = separate upscale2d layers.
         structure='linear',  # 'linear' = human-readable, 'recursive' = efficient, None = select automatically.
@@ -810,7 +811,7 @@ def G_film(
         tf.add_to_collection(
             name=tf.GraphKeys.REGULARIZATION_LOSSES, value=embedding_kl_loss)
 
-        x = block(combo_in, 2, text_embed=text_embed, **kwargs)
+        x = block(combo_in, 2, text_embed=text_embed, weight_decay_film, **kwargs)
         images_out = torgb(x, 2)
         for res in range(3, resolution_log2 + 1):
             lod = resolution_log2 - res
