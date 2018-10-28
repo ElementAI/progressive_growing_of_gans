@@ -43,6 +43,7 @@ def models():
 @api.route("/models/<name>")
 def swap_models(name):
     global SESS
+    global model
     models_path = os.environ.get("MODELS_PATH")
     models = [f for f in listdir(models_path) if isfile(join(models_path, f))]
     file_name = name + '.pkl'
