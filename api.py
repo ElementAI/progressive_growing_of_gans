@@ -2,7 +2,6 @@ import io
 import os
 import pickle
 
-
 from flask import abort
 from flask import Flask
 from flask import jsonify
@@ -28,7 +27,6 @@ def load_model(path):
 # Initialize TensorFlow session.
 SESS = tf.Session()
 
-
 with SESS.as_default():
     with SESS.graph.as_default():
         _, _, model = load_model(os.environ.get("MODEL_PATH"))
@@ -52,10 +50,13 @@ def swap_models(name):
             new_sess = tf.Session()
             with new_sess.as_default():
                 with new_sess.graph.as_default():
-                    _, _, model = load_model(file_name)
+                    _, _, model = load_model(
+                        os.path.join(models_path, file_name))
             SESS.close()
             SESS = new_sess
-        except:
+        except Exception as e:
+            print(e)
+            print(file_name)
             return jsonify({'error': 'Fail to load the model'}), 403
 
     return jsonify({'loaded': file_name}), 200
@@ -97,7 +98,8 @@ def predict():
     with SESS.as_default():
         with SESS.graph.as_default():
             images = model.run(data, labels)
-    images = np.clip(np.rint((images + 1.0) / 2.0 * 255.0), 0.0, 255.0).astype(np.uint8) # [-1,1] => [0,255]
+    images = np.clip(np.rint((images + 1.0) / 2.0 * 255.0), 0.0, 255.0).astype(
+        np.uint8)  # [-1,1] => [0,255]
     images = images.transpose(0, 2, 3, 1)
     print(images.shape)
     # Convert array to Image
