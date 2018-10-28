@@ -12,7 +12,8 @@ from flask_cors import CORS
 import numpy as np
 import PIL
 import tensorflow as tf
-
+from os import listdir
+from os.path import isfile, join
 
 api = Flask(__name__)
 CORS(api)
@@ -25,13 +26,39 @@ def load_model(path):
 
 
 # Initialize TensorFlow session.
-# tf.InteractiveSession()
-sess = tf.Session()
+SESS = tf.Session()
 
 
-with sess.as_default():
-    with sess.graph.as_default():
+with SESS.as_default():
+    with SESS.graph.as_default():
         _, _, model = load_model(os.environ.get("MODEL_PATH"))
+
+
+@api.route("/models")
+def models():
+    models_path = os.environ.get("MODELS_PATH")
+    models = [f for f in listdir(models_path) if isfile(join(models_path, f))]
+    models = [m.replace('.pkl', '') for m in models]
+    return jsonify({'available_models': models}), 200
+
+
+@api.route("/models/<name>")
+def swap_models(name):
+    models_path = os.environ.get("MODELS_PATH")
+    models = [f for f in listdir(models_path) if isfile(join(models_path, f))]
+    file_name = name + '.pkl'
+    if file_name in models:
+        try:
+            new_sess = tf.Session()
+            with new_sess.as_default():
+                with new_sess.graph.as_default():
+                    _, _, model = load_model(file_name)
+            SESS.close()
+            SESS = new_sess
+        except:
+            return jsonify({'error': 'Fail to load the model'}), 403
+
+    return jsonify({'loaded': file_name}), 200
 
 
 @api.route("/healthcheck")
@@ -67,8 +94,8 @@ def predict():
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
 
     print(labels.shape)
-    with sess.as_default():
-        with sess.graph.as_default():
+    with SESS.as_default():
+        with SESS.graph.as_default():
             images = model.run(data, labels)
     images = np.clip(np.rint((images + 1.0) / 2.0 * 255.0), 0.0, 255.0).astype(np.uint8) # [-1,1] => [0,255]
     images = images.transpose(0, 2, 3, 1)

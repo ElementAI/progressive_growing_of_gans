@@ -19,6 +19,7 @@ services:
       dockerfile: Dockerfile.api
     environment:
       MODEL_PATH: ${MODEL_PATH}
+      MODELS_PATH: ${MODELS_PATH}
     volumes:
       - /mnt/home/thomas/models_t_shirts/:/models
       - .:/src
