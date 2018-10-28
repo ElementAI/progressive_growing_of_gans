@@ -21,7 +21,7 @@ services:
       MODEL_PATH: ${MODEL_PATH}
       MODELS_PATH: ${MODELS_PATH}
     volumes:
-      - /mnt/home/thomas/models_t_shirts/:/models
+      - /mnt/home/thomas/models_t_shirts/flat_models:/models
       - .:/src
     ports:
       - "5000:5000"
