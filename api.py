@@ -30,6 +30,10 @@ SESS = tf.Session()
 with SESS.as_default():
     with SESS.graph.as_default():
         _, _, model = load_model(os.environ.get("MODEL_PATH"))
+        data = np.array([np.random.normal(0, 1, size=512)])
+        labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
+        images = model.run(data, labels)
+        print(images.shape)
 
 
 @api.route("/models")
