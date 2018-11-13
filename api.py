@@ -47,6 +47,8 @@ def swap_models(name):
     models_path = os.environ.get("MODELS_PATH")
     models = [f for f in listdir(models_path) if isfile(join(models_path, f))]
     file_name = name + '.pkl'
+    data = np.array([np.random.normal(0, 1, size=512)])
+    labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
     if file_name in models:
         try:
             new_sess = tf.Session()
@@ -54,6 +56,8 @@ def swap_models(name):
                 with new_sess.graph.as_default():
                     _, _, model = load_model(
                         os.path.join(models_path, file_name))
+                    images = model.run(data, labels)
+                    print(images.shape)
             SESS.close()
             SESS = new_sess
         except Exception as e:
@@ -88,8 +92,6 @@ def predict():
         data = data['data']
 
     data = np.array([data])
-    print(model)
-    print(data)
     print(data.shape)
     print(model.input_shapes)
     if data.shape[1] != model.input_shapes[0][1]:
