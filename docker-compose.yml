@@ -13,7 +13,6 @@ services:
 
   api:
     image: pgan-api
-    user: "1000:1000"
     build:
       shm_size: '8gb'
       context: .
