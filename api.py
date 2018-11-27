@@ -82,7 +82,9 @@ def swap_models(name):
     labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
     if file_name in models:
         try:
-            new_sess = tf.Session()
+            tf_config = tf.ConfigProto()
+            tf_config.gpu_options.allow_growth = True
+            new_sess = tf.Session(config=tf_config)
             with new_sess.as_default():
                 with new_sess.graph.as_default():
                     model_name = os.path.basename(file_name)
