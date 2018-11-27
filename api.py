@@ -47,6 +47,7 @@ def init():
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.allow_growth = True
+    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.5
     SESS = tf.Session(config=tf_config)
     with SESS.as_default():
         with SESS.graph.as_default():
@@ -84,6 +85,7 @@ def swap_models(name):
         try:
             tf_config = tf.ConfigProto()
             tf_config.gpu_options.allow_growth = True
+            tf_config.gpu_options.per_process_gpu_memory_fraction = 0.5
             new_sess = tf.Session(config=tf_config)
             with new_sess.as_default():
                 with new_sess.graph.as_default():
