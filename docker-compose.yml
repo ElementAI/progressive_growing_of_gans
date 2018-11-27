@@ -1,4 +1,4 @@
-version: '3.5'
+version: '2.3'
 services:
   notebook:
     volumes:
@@ -13,6 +13,7 @@ services:
 
   api:
     image: pgan-api
+    runtime: nvidia
     build:
       shm_size: '8gb'
       context: .
