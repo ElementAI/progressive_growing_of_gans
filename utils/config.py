@@ -31,6 +31,16 @@ configs = {
         'default': '/tmp/cache',
         'type': str
     },
+    's3_bucket_name': {
+        'description': 'S3 bucket name',
+        'default': '',
+        'type': str
+    },
+    's3_directory': {
+        'description': 'S3 directory',
+        'default': '',
+        'type': str
+    },
 }
 
 
