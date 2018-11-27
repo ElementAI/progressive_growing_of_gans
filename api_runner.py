@@ -33,6 +33,19 @@ def gunicorn():
     s3_directory = os.environ.get('S3_DIRECTORY', '')
     if s3_bucket_name:
         Config.set('s3_directory', s3_directory)
+    # twitter credentials
+    consumer_key = os.environ.get('CONSUMER_KEY', '')
+    if consumer_key:
+        Config.set('consumer_key', consumer_key)
+    consumer_secret = os.environ.get('CONSUMER_SECRET', '')
+    if consumer_secret:
+        Config.set('consumer_secret', consumer_secret)
+    access_token = os.environ.get('ACCESS_TOKEN', '')
+    if access_token:
+        Config.set('access_token', access_token)
+    access_token_secret = os.environ.get('ACCESS_TOKEN_SECRET', '')
+    if access_token_secret:
+        Config.set('access_token_secret', access_token_secret)
     api.init()
 
     return api.app

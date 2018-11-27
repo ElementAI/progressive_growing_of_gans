@@ -20,6 +20,8 @@ services:
     environment:
       MODEL_PATH: ${MODEL_PATH}
       MODELS_PATH: ${MODELS_PATH}
+    env_file:
+      - .env_api
     volumes:
       - /mnt/home/thomas/models_t_shirts/flat_models:/models
       - .:/src

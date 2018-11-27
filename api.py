@@ -18,6 +18,7 @@ from pathlib import Path
 from utils.config import Config
 import boto3
 import qrcode
+import twitter
 
 cache = False
 cache_dir = "/tmp"
@@ -31,10 +32,13 @@ CORS(app)
 SESS = None
 model = None
 model_name = None
+twitter_api = None
+
 
 def init():
     global SESS, model, model_name, cache, cache_dir
     global s3_bucket_name, s3_directory
+    global twitter_api
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -43,6 +47,16 @@ def init():
 
     s3_bucket_name = Config.get('s3_bucket_name')
     s3_directory = Config.get('s3_directory')
+    consumer_key = Config.get('consumer_key')
+    consumer_secret = Config.get('consumer_secret')
+    access_token = Config.get('access_token')
+    access_token_secret = Config.get('access_token_secret')
+
+    twitter_api = twitter.Api(
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        access_token_key=access_token,
+        access_token_secret=access_token_secret)
 
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
@@ -64,6 +78,7 @@ def load_model(path):
     with open(path, 'rb') as file:
         G, D, Gs = pickle.load(file)
     return G, D, Gs
+
 
 @app.route("/models")
 def models():
@@ -112,9 +127,7 @@ def healthcheck():
 @app.route("/config")
 def config():
     global model
-    return jsonify({
-        'input_shape': model.input_shapes[0]
-    })
+    return jsonify({'input_shape': model.input_shapes[0]})
 
 
 def get_prediction(data):
@@ -123,7 +136,9 @@ def get_prediction(data):
     cache_file = None
     if cache:
         hash_str = "_".join([str(d) for d in data]).encode()
-        cache_file = os.path.join(cache_dir, hashlib.sha256(hash_str).hexdigest() + '_' + model_name + '.png')
+        cache_file = os.path.join(
+            cache_dir,
+            hashlib.sha256(hash_str).hexdigest() + '_' + model_name + '.png')
         if os.path.exists(cache_file):
             return cache_file
 
@@ -207,16 +222,12 @@ def upload_s3():
     else:
         bucket.put_object(Key=filename, Body=prediction, ACL='public-read')
 
-    bucket_location = boto3.client('s3').get_bucket_location(Bucket=s3_bucket_name)
+    bucket_location = boto3.client('s3').get_bucket_location(
+        Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
-        bucket_location['LocationConstraint'],
-        s3_bucket_name,
-        filename
-    )
+        bucket_location['LocationConstraint'], s3_bucket_name, filename)
 
-    return jsonify({
-        'public_url': object_url
-    })
+    return jsonify({'public_url': object_url})
 
 
 @app.route("/qrcode", methods=['POST'])
@@ -267,7 +278,9 @@ def qrcode_post():
     )
     qr.add_data(qrcode_params['content'])
     qr.make(fit=qrcode_params['fit'])
-    img = qr.make_image(fill_color=qrcode_params['fill_color'], back_color=qrcode_params['back_color'])
+    img = qr.make_image(
+        fill_color=qrcode_params['fill_color'],
+        back_color=qrcode_params['back_color'])
     img_io = io.BytesIO()
     img.save(img_io, format='PNG')
     img_io.seek(0)
@@ -277,3 +290,16 @@ def qrcode_post():
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='qrcode.png'), 200
+
+
+@app.route("/twitter", methods=['POST'])
+def post_to_twitter():
+    data = request.get_json()
+    user_handle = data.get('user_handle', 'a NeurIPS attendee')
+    link_asset = data.get('link_asset', None)
+    if link_asset is None:
+        abort(404)
+    response = twitter_api.PostUpdate(
+        "New creation by {}! @element_ai".format(user_handle),
+        media=link_asset)
+    return jsonify({'response': response}), 200
