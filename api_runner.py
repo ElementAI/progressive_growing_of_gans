@@ -33,9 +33,6 @@ def gunicorn():
     s3_directory = os.environ.get('S3_DIRECTORY', '')
     if s3_bucket_name:
         Config.set('s3_directory', s3_directory)
-    qrcode_message = os.environ.get('QRCODE_MESSAGE', '')
-    if qrcode_message:
-        Config.set('qrcode_message', qrcode_message)
     api.init()
 
     return api.app
@@ -57,9 +54,6 @@ def main():
     s3_directory = os.environ.get('S3_DIRECTORY', '')
     if s3_directory:
         Config.set('s3_directory', s3_directory)
-    qrcode_message = os.environ.get('QRCODE_MESSAGE', '')
-    if qrcode_message:
-        Config.set('qrcode_message', qrcode_message)
 
     api.init()
     api.app.run(host='0.0.0.0', port=5000)

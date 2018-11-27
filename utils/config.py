@@ -41,11 +41,6 @@ configs = {
         'default': '',
         'type': str
     },
-    'qrcode_message': {
-        'description': 'QRcode content. Use {} to inject url.',
-        'default': '{}',
-        'type': str
-    },
 }
 
 

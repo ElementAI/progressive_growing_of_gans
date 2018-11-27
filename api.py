@@ -25,8 +25,6 @@ cache_dir = "/tmp"
 s3_bucket_name = ""
 s3_directory = ""
 
-qrcode_message = ""
-
 app = Flask(__name__)
 CORS(app)
 
@@ -37,7 +35,6 @@ model_name = None
 def init():
     global SESS, model, model_name, cache, cache_dir
     global s3_bucket_name, s3_directory
-    global qrcode_message
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -46,8 +43,6 @@ def init():
 
     s3_bucket_name = Config.get('s3_bucket_name')
     s3_directory = Config.get('s3_directory')
-
-    qrcode_message = Config.get('qrcode_message')
 
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
@@ -176,54 +171,9 @@ def predict():
         attachment_filename='prediction.png'), 200
 
 
-def get_qrcode_img(data, body, message='{}'):
-    qrcode_params = {
-        'version': 10,
-        'border': 2,
-        'box_size': 10,
-        'fill_color': 'black',
-        'back_color': 'white',
-        'fit': True,
-    }
-
-    if 'qrcode' in data and isinstance(data['qrcode'], dict):
-        if 'version' in data['qrcode']:
-            qrcode_params['version'] = int(data['qrcode']['version'])
-            if qrcode_params['version'] < 1:
-                qrcode_params['version'] = None
-        if 'border' in data['qrcode']:
-            qrcode_params['border'] = int(data['qrcode']['border'])
-        if 'box_size' in data['qrcode']:
-            qrcode_params['box_size'] = int(data['qrcode']['box_size'])
-        if 'fill_color' in data['qrcode']:
-            qrcode_params['fill_color'] = data['qrcode']['fill_color']
-        if 'back_color' in data['qrcode']:
-            qrcode_params['back_color'] = data['qrcode']['back_color']
-        if 'fit' in data['qrcode']:
-            qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
-
-    if not message:
-        message = '{}'
-
-    qr = qrcode.QRCode(
-        version=qrcode_params['version'],
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=qrcode_params['box_size'],
-        border=qrcode_params['border'],
-    )
-    qr.add_data(message.format(body))
-    qr.make(fit=qrcode_params['fit'])
-    img = qr.make_image(fill_color=qrcode_params['fill_color'], back_color=qrcode_params['back_color'])
-    img_io = io.BytesIO()
-    img.save(img_io, format='PNG')
-    img_io.seek(0)
-    return img_io
-
-@app.route("/qrcode", methods=['POST'])
-def qrcode_post():
-    global SESS, model, model_name
+@app.route("/upload", methods=['POST'])
+def upload_s3():
     global s3_bucket_name, s3_directory
-    global qrcode_message
 
     if not s3_bucket_name:
         raise 'Empty s3 bucket name ! Set env var S3_BUCKET_NAME=...'
@@ -261,10 +211,64 @@ def qrcode_post():
         filename
     )
 
-    qrcode_img = get_qrcode_img(data_json, object_url, qrcode_message)
+    return jsonify({
+        'public_url': object_url
+    })
+
+
+@app.route("/qrcode", methods=['POST'])
+def qrcode_post():
+    data = request.get_json()
+    if data is None:
+        print("no data")
+        abort(404)
+    if 'qrcode' not in data:
+        print("qrcode not in data")
+        abort(404)
+
+    qrcode_params = {
+        'version': 10,
+        'border': 2,
+        'box_size': 10,
+        'fill_color': 'black',
+        'back_color': 'white',
+        'fit': True,
+        'content': '',
+    }
+
+    if 'qrcode' in data and isinstance(data['qrcode'], dict):
+        if 'version' in data['qrcode']:
+            qrcode_params['version'] = int(data['qrcode']['version'])
+            if qrcode_params['version'] < 1:
+                qrcode_params['version'] = None
+        if 'border' in data['qrcode']:
+            qrcode_params['border'] = int(data['qrcode']['border'])
+        if 'box_size' in data['qrcode']:
+            qrcode_params['box_size'] = int(data['qrcode']['box_size'])
+        if 'fill_color' in data['qrcode']:
+            qrcode_params['fill_color'] = data['qrcode']['fill_color']
+        if 'back_color' in data['qrcode']:
+            qrcode_params['back_color'] = data['qrcode']['back_color']
+        if 'content' in data['qrcode']:
+            qrcode_params['content'] = data['qrcode']['content']
+        if 'fit' in data['qrcode']:
+            qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
+
+    qr = qrcode.QRCode(
+        version=qrcode_params['version'],
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=qrcode_params['box_size'],
+        border=qrcode_params['border'],
+    )
+    qr.add_data(qrcode_params['content'])
+    qr.make(fit=qrcode_params['fit'])
+    img = qr.make_image(fill_color=qrcode_params['fill_color'], back_color=qrcode_params['back_color'])
+    img_io = io.BytesIO()
+    img.save(img_io, format='PNG')
+    img_io.seek(0)
 
     return send_file(
-        qrcode_img,
+        img_io,
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='qrcode.png'), 200
