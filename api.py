@@ -268,14 +268,14 @@ def qrcode_post():
     if 'content' in data['qrcode']:
         qrcode_params['content'] = data['qrcode']['content']
     if 'fit' in data['qrcode']:
-        qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
+        qrcode_params['fit'] = data['qrcode'][
+            'fit'] in [True, '1', 'true', 'True']
 
     qr = qrcode.QRCode(
         version=qrcode_params['version'],
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=qrcode_params['box_size'],
-        border=qrcode_params['border'],
-    )
+        border=qrcode_params['border'], )
     qr.add_data(qrcode_params['content'])
     qr.make(fit=qrcode_params['fit'])
     img = qr.make_image(
