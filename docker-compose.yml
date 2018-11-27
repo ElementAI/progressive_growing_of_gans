@@ -25,5 +25,6 @@ services:
     volumes:
       - /mnt/home/thomas/models_t_shirts/flat_models:/models
       - .:/src
+      - /home/ilse/.aws:/home/ilse/.aws
     ports:
       - "5000:5000"
