@@ -16,9 +16,16 @@ from os.path import isfile, join
 import hashlib
 from pathlib import Path
 from utils.config import Config
+import boto3
+import qrcode
 
 cache = False
 cache_dir = "/tmp"
+
+s3_bucket_name = ""
+s3_directory = ""
+
+qrcode_message = ""
 
 app = Flask(__name__)
 CORS(app)
@@ -29,10 +36,18 @@ model_name = None
 
 def init():
     global SESS, model, model_name, cache, cache_dir
+    global s3_bucket_name, s3_directory
+    global qrcode_message
+
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
     if cache and not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
+
+    s3_bucket_name = Config.get('s3_bucket_name')
+    s3_directory = Config.get('s3_directory')
+
+    qrcode_message = Config.get('qrcode_message')
 
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
@@ -103,31 +118,15 @@ def config():
     })
 
 
-@app.route("/predict", methods=['POST'])
-def predict():
+def get_prediction(data):
     global SESS, model, model_name
-
-    data = request.get_json()
-    if data is None:
-        print("no data")
-        abort(404)
-    if 'data' not in data:
-        print("data not in data")
-        abort(404)
-    else:
-        data = data['data']
 
     cache_file = None
     if cache:
         hash_str = "_".join([str(d) for d in data]).encode()
         cache_file = os.path.join(cache_dir, hashlib.sha256(hash_str).hexdigest() + '_' + model_name + '.png')
         if os.path.exists(cache_file):
-            return send_file(
-                cache_file,
-                mimetype='image/png',
-                as_attachment=True,
-                attachment_filename='prediction.png'), 200
-
+            return cache_file
 
     data = np.array([data])
     # print(data.shape)
@@ -151,8 +150,121 @@ def predict():
     if cache and cache_file:
         img.save(cache_file, format='PNG')
     img_io.seek(0)
+    return img_io
+
+
+@app.route("/predict", methods=['POST'])
+def predict():
+    global SESS, model, model_name
+
+    data = request.get_json()
+    if data is None:
+        print("no data")
+        abort(404)
+    if 'data' not in data:
+        print("data not in data")
+        abort(404)
+    else:
+        data = data['data']
+
+    prediction = get_prediction(data)
+
     return send_file(
-        img_io,
+        prediction,
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='prediction.png'), 200
+
+
+def get_qrcode_img(data, body, message='{}'):
+    qrcode_params = {
+        'version': 10,
+        'border': 2,
+        'box_size': 10,
+        'fill_color': 'black',
+        'back_color': 'white',
+        'fit': True,
+    }
+
+    if 'qrcode' in data and isinstance(data['qrcode'], dict):
+        if 'version' in data['qrcode']:
+            qrcode_params['version'] = int(data['qrcode']['version'])
+            if qrcode_params['version'] < 1:
+                qrcode_params['version'] = None
+        if 'border' in data['qrcode']:
+            qrcode_params['border'] = int(data['qrcode']['border'])
+        if 'box_size' in data['qrcode']:
+            qrcode_params['box_size'] = int(data['qrcode']['box_size'])
+        if 'fill_color' in data['qrcode']:
+            qrcode_params['fill_color'] = data['qrcode']['fill_color']
+        if 'back_color' in data['qrcode']:
+            qrcode_params['back_color'] = data['qrcode']['back_color']
+        if 'fit' in data['qrcode']:
+            qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
+
+    if not message:
+        message = '{}'
+
+    qr = qrcode.QRCode(
+        version=qrcode_params['version'],
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=qrcode_params['box_size'],
+        border=qrcode_params['border'],
+    )
+    qr.add_data(message.format(body))
+    qr.make(fit=qrcode_params['fit'])
+    img = qr.make_image(fill_color=qrcode_params['fill_color'], back_color=qrcode_params['back_color'])
+    img_io = io.BytesIO()
+    img.save(img_io, format='PNG')
+    img_io.seek(0)
+    return img_io
+
+@app.route("/qrcode", methods=['POST'])
+def qrcode_post():
+    global SESS, model, model_name
+    global s3_bucket_name, s3_directory
+    global qrcode_message
+
+    if not s3_bucket_name:
+        raise 'Empty s3 bucket name ! Set env var S3_BUCKET_NAME=...'
+
+    data_json = request.get_json()
+    if data_json is None:
+        print("no data")
+        abort(404)
+    if 'data' not in data_json:
+        print("data not in data")
+        abort(404)
+
+    data = data_json['data']
+
+    hash_str = "_".join([str(d) for d in data]).encode()
+    filename = hashlib.sha256(hash_str).hexdigest() + '.png'
+    if s3_directory:
+        filename = os.path.join(s3_directory, filename)
+
+    prediction = get_prediction(data)
+
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket(s3_bucket_name)
+    key = None
+    if isinstance(prediction, str):
+        with open(prediction, 'rb') as fp:
+            key = bucket.put_object(Key=filename, Body=fp, ACL='public-read')
+    else:
+        key = bucket.put_object(Key=filename, Body=prediction, ACL='public-read')
+
+    bucket_location = boto3.client('s3').get_bucket_location(Bucket=s3_bucket_name)
+    object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
+        bucket_location['LocationConstraint'],
+        s3_bucket_name,
+        filename
+    )
+
+    qrcode_img = get_qrcode_img(data_json, object_url, qrcode_message)
+
+    return send_file(
+        qrcode_img,
+        mimetype='image/png',
+        as_attachment=True,
+        attachment_filename='qrcode.png'), 200

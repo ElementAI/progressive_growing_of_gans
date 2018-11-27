@@ -27,6 +27,15 @@ def gunicorn():
     if config_path:
         Config.load_file(config_path)
     Config.set('cache', cache in [True, '1', 'true', 'True'])
+    s3_bucket_name = os.environ.get('S3_BUCKET_NAME', '')
+    if s3_bucket_name:
+        Config.set('s3_bucket_name', s3_bucket_name)
+    s3_directory = os.environ.get('S3_DIRECTORY', '')
+    if s3_bucket_name:
+        Config.set('s3_directory', s3_directory)
+    qrcode_message = os.environ.get('QRCODE_MESSAGE', '')
+    if qrcode_message:
+        Config.set('qrcode_message', qrcode_message)
     api.init()
 
     return api.app
@@ -42,6 +51,15 @@ def main():
         Config.load_file(config_path)
     cache = args.cache or os.environ.get('CACHE', '') in [True, '1', 'true', 'True']
     Config.set('cache', cache)
+    s3_bucket_name = os.environ.get('S3_BUCKET_NAME', '')
+    if s3_bucket_name:
+        Config.set('s3_bucket_name', s3_bucket_name)
+    s3_directory = os.environ.get('S3_DIRECTORY', '')
+    if s3_directory:
+        Config.set('s3_directory', s3_directory)
+    qrcode_message = os.environ.get('QRCODE_MESSAGE', '')
+    if qrcode_message:
+        Config.set('qrcode_message', qrcode_message)
 
     api.init()
     api.app.run(host='0.0.0.0', port=5000)
