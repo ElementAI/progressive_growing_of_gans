@@ -180,11 +180,11 @@ def upload_s3():
 
     data_json = request.get_json()
     if data_json is None:
-        print("no data")
-        abort(404)
+        print("no json data")
+        return "no json data", 400
     if 'data' not in data_json:
-        print("data not in data")
-        abort(404)
+        print("data not in json data")
+        return "data not in data", 400
 
     data = data_json['data']
 
@@ -197,12 +197,11 @@ def upload_s3():
 
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(s3_bucket_name)
-    key = None
     if isinstance(prediction, str):
         with open(prediction, 'rb') as fp:
-            key = bucket.put_object(Key=filename, Body=fp, ACL='public-read')
+            bucket.put_object(Key=filename, Body=fp, ACL='public-read')
     else:
-        key = bucket.put_object(Key=filename, Body=prediction, ACL='public-read')
+        bucket.put_object(Key=filename, Body=prediction, ACL='public-read')
 
     bucket_location = boto3.client('s3').get_bucket_location(Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
@@ -220,11 +219,14 @@ def upload_s3():
 def qrcode_post():
     data = request.get_json()
     if data is None:
-        print("no data")
-        abort(404)
+        print("no json data")
+        return "no json data", 400
     if 'qrcode' not in data:
-        print("qrcode not in data")
-        abort(404)
+        print("qrcode not in json data")
+        return "qrcode not in json data", 400
+    if 'content' not in data['qrcode']:
+        print("qrcode.content not in json data")
+        return "qrcode.content not in json data", 400
 
     qrcode_params = {
         'version': 10,
@@ -236,23 +238,22 @@ def qrcode_post():
         'content': '',
     }
 
-    if 'qrcode' in data and isinstance(data['qrcode'], dict):
-        if 'version' in data['qrcode']:
-            qrcode_params['version'] = int(data['qrcode']['version'])
-            if qrcode_params['version'] < 1:
-                qrcode_params['version'] = None
-        if 'border' in data['qrcode']:
-            qrcode_params['border'] = int(data['qrcode']['border'])
-        if 'box_size' in data['qrcode']:
-            qrcode_params['box_size'] = int(data['qrcode']['box_size'])
-        if 'fill_color' in data['qrcode']:
-            qrcode_params['fill_color'] = data['qrcode']['fill_color']
-        if 'back_color' in data['qrcode']:
-            qrcode_params['back_color'] = data['qrcode']['back_color']
-        if 'content' in data['qrcode']:
-            qrcode_params['content'] = data['qrcode']['content']
-        if 'fit' in data['qrcode']:
-            qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
+    if 'version' in data['qrcode']:
+        qrcode_params['version'] = int(data['qrcode']['version'])
+        if qrcode_params['version'] < 1:
+            qrcode_params['version'] = None
+    if 'border' in data['qrcode']:
+        qrcode_params['border'] = int(data['qrcode']['border'])
+    if 'box_size' in data['qrcode']:
+        qrcode_params['box_size'] = int(data['qrcode']['box_size'])
+    if 'fill_color' in data['qrcode']:
+        qrcode_params['fill_color'] = data['qrcode']['fill_color']
+    if 'back_color' in data['qrcode']:
+        qrcode_params['back_color'] = data['qrcode']['back_color']
+    if 'content' in data['qrcode']:
+        qrcode_params['content'] = data['qrcode']['content']
+    if 'fit' in data['qrcode']:
+        qrcode_params['fit'] = data['qrcode']['fit'] in [True, '1', 'true', 'True']
 
     qr = qrcode.QRCode(
         version=qrcode_params['version'],
