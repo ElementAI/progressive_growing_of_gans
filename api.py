@@ -303,4 +303,4 @@ def post_to_twitter():
     response = twitter_api.PostUpdate(
         "New creation by {}! @element_ai".format(user_handle),
         media=link_asset)
-    return jsonify({'response': response}), 200
+    return jsonify({'response': 'Posted: {}'.format(link_asset)}), 200
