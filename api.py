@@ -102,7 +102,7 @@ def shorteng(long_url):
 
     result = requests.post(
         google_url, headers={'content-type': 'application/json'}, data=data)
-    short_url = result.json()['id']
+    short_url = result.json()
     return short_url
 
 
