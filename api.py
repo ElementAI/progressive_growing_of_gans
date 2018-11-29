@@ -119,8 +119,6 @@ def shortent(long_url):
     print(text_data)
     return text_data
 
-def shortent(long_url):
-    request_url = ('' + urlencode({'url':url}))
 
 def load_model(path):
     with open(path, 'rb') as file:
