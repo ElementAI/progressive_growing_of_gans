@@ -18,7 +18,7 @@ from pathlib import Path
 from utils.config import Config
 import boto3
 import qrcode
-import bitly_api
+import requests
 import twitter
 
 cache = False
@@ -40,7 +40,7 @@ def init():
     global SESS, model, model_name, cache, cache_dir
     global s3_bucket_name, s3_directory
     global twitter_api
-    global bitly
+    global bitly_access_token
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -62,7 +62,6 @@ def init():
         access_token_secret=access_token_secret)
     print(twitter_api.VerifyCredentials())
     access_token = os.getenv(bitly_access_token)
-    bitly = bitly_api.Connection(access_token=access_token)
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.allow_growth = True
@@ -77,6 +76,21 @@ def init():
             labels = np.zeros([data.shape[0]] + model.input_shapes[1][1:])
             images = model.run(data, labels)
             print(images.shape)
+
+
+def shorten(uri):
+    query_params = {'access_token': bitly_access_token, 'longUrl': uri}
+
+    endpoint = 'https://api-ssl.bitly.com/v3/shorten'
+    response = requests.get(endpoint, params=query_params, verify=False)
+
+    data = response.json()
+
+    if not data['status_code'] == 200:
+        print("Unexpected status_code: {} in bitly response. {}".format(data[
+            'status_code'], response.text))
+
+    return data['data']['url']
 
 
 def load_model(path):
@@ -231,7 +245,7 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
-    data = bitly.shorten(object_url)
+    data = shorten(object_url)
     print(data)
 
     return jsonify({'public_url': object_url})
