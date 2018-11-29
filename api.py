@@ -113,8 +113,6 @@ def shortent(long_url):
 
     result = requests.post(
         google_url, headers={'content-type': 'application/json'}, params=data)
-    json_data = result.json()
-    print(json_data)
     text_data = result.text
     print(text_data)
     return text_data
