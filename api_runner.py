@@ -46,6 +46,9 @@ def gunicorn():
     access_token_secret = os.environ.get('ACCESS_TOKEN_SECRET', '')
     if access_token_secret:
         Config.set('access_token_secret', access_token_secret)
+    bitly_access_token = os.environ.get('BITLY_ACCESS_TOKEN', '')
+    if bitly_access_token:
+        Config.set('bitly_access_token', bitly_access_token)
     api.init()
 
     return api.app
@@ -67,7 +70,22 @@ def main():
     s3_directory = os.environ.get('S3_DIRECTORY', '')
     if s3_directory:
         Config.set('s3_directory', s3_directory)
-
+    # twitter credentials
+    consumer_key = os.environ.get('CONSUMER_KEY', '')
+    if consumer_key:
+        Config.set('consumer_key', consumer_key)
+    consumer_secret = os.environ.get('CONSUMER_SECRET', '')
+    if consumer_secret:
+        Config.set('consumer_secret', consumer_secret)
+    access_token = os.environ.get('ACCESS_TOKEN', '')
+    if access_token:
+        Config.set('access_token', access_token)
+    access_token_secret = os.environ.get('ACCESS_TOKEN_SECRET', '')
+    if access_token_secret:
+        Config.set('access_token_secret', access_token_secret)
+    bitly_access_token = os.environ.get('BITLY_ACCESS_TOKEN', '')
+    if bitly_access_token:
+        Config.set('bitly_access_token', bitly_access_token)
     api.init()
     api.app.run(host='0.0.0.0', port=5000)
 

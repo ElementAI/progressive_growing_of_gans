@@ -18,6 +18,7 @@ from pathlib import Path
 from utils.config import Config
 import boto3
 import qrcode
+import bitly_api
 import twitter
 
 cache = False
@@ -39,6 +40,7 @@ def init():
     global SESS, model, model_name, cache, cache_dir
     global s3_bucket_name, s3_directory
     global twitter_api
+    global bitly
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -51,6 +53,7 @@ def init():
     consumer_secret = Config.get('consumer_secret')
     access_token = Config.get('access_token')
     access_token_secret = Config.get('access_token_secret')
+    bitly_access_token = Config.get('bitly_access_token')
 
     twitter_api = twitter.Api(
         consumer_key=consumer_key,
@@ -58,7 +61,8 @@ def init():
         access_token_key=access_token,
         access_token_secret=access_token_secret)
     print(twitter_api.VerifyCredentials())
-
+    access_token = os.getenv(bitly_access_token)
+    bitly = bitly_api.Connection(access_token=access_token)
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.allow_growth = True
@@ -227,6 +231,8 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
+    data = bitly.shorten(object_url)
+    print(data)
 
     return jsonify({'public_url': object_url})
 

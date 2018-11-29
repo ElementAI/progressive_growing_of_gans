@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     env_file:
-      - .env_api
+      - .env_api_prod
     volumes:
       - /mnt/home/thomas/models_t_shirts/flat_models:/models
       - .:/src
