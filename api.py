@@ -41,7 +41,7 @@ def init():
     global s3_bucket_name, s3_directory
     global twitter_api
     global bitly_access_token
-    global google_api_key
+    global google_api_access_token
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -55,7 +55,7 @@ def init():
     access_token = Config.get('access_token')
     access_token_secret = Config.get('access_token_secret')
     bitly_access_token = Config.get('bitly_access_token')
-    google_api_key = Config.get('google_api_key')
+    google_api_access_token = Config.get('google_api_access_token')
 
     twitter_api = twitter.Api(
         consumer_key=consumer_key,
@@ -98,7 +98,7 @@ def shorten(uri):
 def shorteng(long_url):
     data = json.dumps({'longUrl': long_url})
     google_url = "https://www.googleapis.com/urlshortener/v1/url?key={}".format(
-        google_api_key)
+        google_api_access_token)
 
     result = requests.post(
         google_url, headers={'content-type': 'application/json'}, data=data)

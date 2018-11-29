@@ -49,6 +49,9 @@ def gunicorn():
     bitly_access_token = os.environ.get('BITLY_ACCESS_TOKEN', '')
     if bitly_access_token:
         Config.set('bitly_access_token', bitly_access_token)
+    google_api_access_token = os.environ.get('GOOGLE_API_ACCESS_TOKEN', '')
+    if google_api_access_token:
+        Config.set('google_api_access_token', google_api_access_token)
     api.init()
 
     return api.app
