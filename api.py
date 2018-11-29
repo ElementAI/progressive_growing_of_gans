@@ -17,7 +17,6 @@ import tensorflow as tf
 import twitter
 from flask import Flask, abort, jsonify, request, send_file
 from flask_cors import CORS
-from pyshorteners.tinyurl import Shortener
 from utils.config import Config
 
 cache = False
@@ -43,7 +42,6 @@ def init():
     global twitter_api
     global bitly_access_token
     global google_api_access_token
-    global shortener
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -58,7 +56,6 @@ def init():
     access_token_secret = Config.get('access_token_secret')
     bitly_access_token = Config.get('bitly_access_token')
     google_api_access_token = Config.get('google_api_access_token')
-    shortener = Shortener()
 
     twitter_api = twitter.Api(
         consumer_key=consumer_key,
