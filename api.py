@@ -17,6 +17,7 @@ import tensorflow as tf
 import twitter
 from flask import Flask, abort, jsonify, request, send_file
 from flask_cors import CORS
+import pyshorteners
 from utils.config import Config
 
 cache = False
@@ -42,6 +43,7 @@ def init():
     global twitter_api
     global bitly_access_token
     global google_api_access_token
+    global shortener
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -56,6 +58,7 @@ def init():
     access_token_secret = Config.get('access_token_secret')
     bitly_access_token = Config.get('bitly_access_token')
     google_api_access_token = Config.get('google_api_access_token')
+    shortener = pyshorteners.Shortener()
 
     twitter_api = twitter.Api(
         consumer_key=consumer_key,
@@ -258,7 +261,7 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
-    data = shorteng(object_url)
+    data = shortener.tinyurl.short(object_url)
     print(data)
 
     return jsonify({'public_url': object_url})

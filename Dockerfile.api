@@ -23,6 +23,8 @@ COPY requirements-pip.txt /src
 RUN pip install -r requirements-pip.txt
 RUN pip install python-twitter
 RUN pip install google-api-python-client
+RUN pip install pyshorteners
+
 # Nginx configuration
 COPY ./conf/nginx/nginx.conf /etc/nginx/conf.d/nginx.conf
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
