@@ -109,6 +109,22 @@ def shorteng(long_url):
     return short_url
 
 
+def shortent(long_url):
+    # data = json.dumps({'longUrl': long_url})
+    data = {'longUrl': long_url}
+    google_url = "http://tinyurl.com/api-create.php"
+
+    result = requests.post(
+        google_url, headers={'content-type': 'application/json'}, params=data)
+    json_data = result.json()
+    print(json_data)
+    text_data = result.text
+    print(text_data)
+    return text_data
+
+def shortent(long_url):
+    request_url = ('' + urlencode({'url':url}))
+
 def load_model(path):
     with open(path, 'rb') as file:
         G, D, Gs = pickle.load(file)
@@ -261,7 +277,7 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
-    data = shortener.short(object_url)
+    data = shortent(object_url)
     print(data)
 
     return jsonify({'public_url': object_url})
