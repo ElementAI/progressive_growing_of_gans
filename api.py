@@ -108,7 +108,7 @@ def shorteng(long_url):
 
 def shortent(long_url):
     # data = json.dumps({'longUrl': long_url})
-    data = {'longUrl': long_url}
+    data = {'url': long_url}
     google_url = "http://tinyurl.com/api-create.php"
 
     result = requests.post(
