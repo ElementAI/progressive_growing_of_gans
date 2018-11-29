@@ -114,7 +114,6 @@ def shortent(long_url):
     result = requests.post(
         google_url, headers={'content-type': 'application/json'}, params=data)
     text_data = result.text
-    print(text_data)
     return text_data
 
 
@@ -270,10 +269,14 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
-    data = shortent(object_url)
-    print(data)
 
-    return jsonify({'public_url': object_url})
+    short_url = None
+    try:
+        short_url = shortent(object_url)
+    except Exception as e:
+        print(e)
+
+    return jsonify({'public_url': object_url, 'short_url': short_url})
 
 
 @app.route("/qrcode", methods=['POST'])
