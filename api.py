@@ -1,25 +1,23 @@
+import hashlib
 import io
+import json
 import os
 import pickle
-
-from flask import abort
-from flask import Flask
-from flask import jsonify
-from flask import request
-from flask import send_file
-from flask_cors import CORS
-import numpy as np
-import PIL
-import tensorflow as tf
 from os import listdir
 from os.path import isfile, join
-import hashlib
 from pathlib import Path
-from utils.config import Config
-import boto3
-import qrcode
+
 import requests
+
+import boto3
+import numpy as np
+import PIL
+import qrcode
+import tensorflow as tf
 import twitter
+from flask import Flask, abort, jsonify, request, send_file
+from flask_cors import CORS
+from utils.config import Config
 
 cache = False
 cache_dir = "/tmp"
@@ -34,6 +32,8 @@ SESS = None
 model = None
 model_name = None
 twitter_api = None
+bitly_access_token = None
+google_api_key = None
 
 
 def init():
@@ -41,6 +41,7 @@ def init():
     global s3_bucket_name, s3_directory
     global twitter_api
     global bitly_access_token
+    global google_api_key
 
     cache = Config.get('cache')
     cache_dir = Config.get('cache_dir')
@@ -54,6 +55,7 @@ def init():
     access_token = Config.get('access_token')
     access_token_secret = Config.get('access_token_secret')
     bitly_access_token = Config.get('bitly_access_token')
+    google_api_key = Config.get('google_api_key')
 
     twitter_api = twitter.Api(
         consumer_key=consumer_key,
@@ -91,6 +93,17 @@ def shorten(uri):
             'status_code'], response.text))
 
     return data['data']['url']
+
+
+def shorteng(long_url):
+    data = json.dumps({'longUrl': long_url})
+    google_url = "https://www.googleapis.com/urlshortener/v1/url?key={}".format(
+        google_api_key)
+
+    result = requests.post(
+        google_url, headers={'content-type': 'application/json'}, data=data)
+    short_url = result.json()['id']
+    return short_url
 
 
 def load_model(path):
@@ -245,7 +258,7 @@ def upload_s3():
         Bucket=s3_bucket_name)
     object_url = "https://s3-{0}.amazonaws.com/{1}/{2}".format(
         bucket_location['LocationConstraint'], s3_bucket_name, filename)
-    data = shorten(object_url)
+    data = shorteng(object_url)
     print(data)
 
     return jsonify({'public_url': object_url})
