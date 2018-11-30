@@ -31,7 +31,6 @@ CORS(app)
 SESS = None
 model = None
 model_name = None
-twitter_api = None
 bitly_access_token = None
 google_api_key = None
 
@@ -39,7 +38,6 @@ google_api_key = None
 def init():
     global SESS, model, model_name, cache, cache_dir
     global s3_bucket_name, s3_directory
-    global twitter_api
     global bitly_access_token
     global google_api_access_token
 
@@ -57,12 +55,6 @@ def init():
     bitly_access_token = Config.get('bitly_access_token')
     google_api_access_token = Config.get('google_api_access_token')
 
-    twitter_api = twitter.Api(
-        consumer_key=consumer_key,
-        consumer_secret=consumer_secret,
-        access_token_key=access_token,
-        access_token_secret=access_token_secret)
-    print(twitter_api.VerifyCredentials())
     access_token = os.getenv(bitly_access_token)
     # Initialize TensorFlow session.
     tf_config = tf.ConfigProto()
@@ -339,16 +331,3 @@ def qrcode_post():
         mimetype='image/png',
         as_attachment=True,
         attachment_filename='qrcode.png'), 200
-
-
-@app.route("/twitter", methods=['POST'])
-def post_to_twitter():
-    data = request.get_json()
-    user_handle = data.get('user_handle', 'a NeurIPS attendee')
-    link_asset = data.get('link_asset', None)
-    if link_asset is None:
-        abort(404)
-    response = twitter_api.PostUpdate(
-        "New creation by {}! @element_ai".format(user_handle),
-        media=link_asset)
-    return jsonify({'response': 'Posted: {}'.format(link_asset)}), 200
