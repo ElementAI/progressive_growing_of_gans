@@ -118,6 +118,7 @@ def tweet_intent_url(original_url):
         "url": original_url
     }
     final_url = content.format(urlencode(payload, quote_via=quote_plus))
+    print("TWEET INTENT: {}".format(final_url))
     return final_url
 
 
