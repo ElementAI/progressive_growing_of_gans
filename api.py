@@ -265,9 +265,17 @@ def upload_s3():
     bucket = s3.Bucket(s3_bucket_name)
     if isinstance(prediction, str):
         with open(prediction, 'rb') as fp:
-            bucket.put_object(Key=filename, Body=fp, ACL='public-read')
+            bucket.put_object(
+                Key=filename,
+                Body=fp,
+                ACL='public-read',
+                ContentType='image/png')
     else:
-        bucket.put_object(Key=filename, Body=prediction, ACL='public-read')
+        bucket.put_object(
+            Key=filename,
+            Body=prediction,
+            ACL='public-read',
+            ContentType='image/png')
 
     bucket_location = boto3.client('s3').get_bucket_location(
         Bucket=s3_bucket_name)
