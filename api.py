@@ -113,12 +113,11 @@ def tweet_intent_url(original_url):
     content = "https://twitter.com/intent/tweet?{}"
     payload = {
         "text": "I just created a new design with ILSE at NeurIPS",
-        "hashtag": "NeurIPS2018",
+        "hashtags": "NeurIPS2018",
         "via": "element_ai",
         "url": original_url
     }
     final_url = content.format(urlencode(payload, quote_via=quote_plus))
-    print("TWEET INTENT: {}".format(final_url))
     return final_url
 
 
