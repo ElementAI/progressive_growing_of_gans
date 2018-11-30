@@ -14,7 +14,7 @@ import numpy as np
 import PIL
 import qrcode
 import tensorflow as tf
-import twitter
+from urllib.parse import urlencode, quote_plus
 from flask import Flask, abort, jsonify, request, send_file
 from flask_cors import CORS
 from utils.config import Config
@@ -107,6 +107,18 @@ def shortent(long_url):
         google_url, headers={'content-type': 'application/json'}, params=data)
     text_data = result.text
     return text_data
+
+
+def tweet_intent_url(original_url):
+    content = "https://twitter.com/intent/tweet?{}"
+    payload = {
+        "text": "I just created a new design with ILSE at NeurIPS",
+        "hashtag": "NeurIPS2018",
+        "via": "element_ai",
+        "url": original_url
+    }
+    final_url = content.format(urlencode(payload, quote_via=quote_plus))
+    return final_url
 
 
 def load_model(path):
@@ -307,7 +319,7 @@ def qrcode_post():
     if 'back_color' in data['qrcode']:
         qrcode_params['back_color'] = data['qrcode']['back_color']
     if 'content' in data['qrcode']:
-        qrcode_params['content'] = data['qrcode']['content']
+        qrcode_params['content'] = tweet_intent_url(data['qrcode']['content'])
     if 'fit' in data['qrcode']:
         qrcode_params['fit'] = data['qrcode'][
             'fit'] in [True, '1', 'true', 'True']
