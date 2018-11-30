@@ -6,7 +6,7 @@ import pickle
 from os import listdir
 from os.path import isfile, join
 from pathlib import Path
-
+import urllib
 import requests
 
 import boto3
@@ -115,7 +115,7 @@ def tweet_intent_url(original_url):
         "text": "I just created a new design with ILSE at NeurIPS",
         "hashtags": "NeurIPS2018",
         "via": "element_ai",
-        "url": original_url
+        "url": urllib.quote_plus(original_url)
     }
     final_url = content.format(urlencode(payload, quote_via=quote_plus))
     return final_url
